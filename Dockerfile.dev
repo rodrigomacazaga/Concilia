@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+# Instalar git para operaciones git
+RUN apk add --no-cache git openssh-client
+
+WORKDIR /app
+
+# Copiar archivos de dependencias
+COPY package*.json ./
+
+# Instalar dependencias
+RUN npm install
+
+# Exponer puerto
+EXPOSE 3000
+
+# Variables de entorno
+ENV NODE_ENV=development
+
+# Comando para desarrollo con hot reload
+CMD ["npm", "run", "dev"]

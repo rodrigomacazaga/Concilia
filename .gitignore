@@ -35,3 +35,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Data persistence (keep structure, ignore content)
+/data/conversations/*
+/data/projects.json
+!/data/.gitkeep
+
+# Workspaces (cloned projects)
+/workspaces/*
+!/workspaces/.gitkeep
+
+# MCP servers data
+/mcp-servers/*
+!/mcp-servers/.gitkeep
