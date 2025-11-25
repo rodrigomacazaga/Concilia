@@ -44,8 +44,8 @@ export interface DevContextType {
   setLeftPanelSize: (size: number) => void;
 
   // Tab activo en preview
-  activePreviewTab: "preview" | "files" | "changes" | "terminal";
-  setActivePreviewTab: (tab: "preview" | "files" | "changes" | "terminal") => void;
+  activePreviewTab: "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git";
+  setActivePreviewTab: (tab: "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git") => void;
 
   // Notificaciones
   notifications: Notification[];
@@ -98,7 +98,7 @@ export function DevContextProvider({ children }: { children: React.ReactNode }) 
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [leftPanelSize, setLeftPanelSize] = useState(50);
-  const [activePreviewTab, setActivePreviewTab] = useState<"preview" | "files" | "changes" | "terminal">("files");
+  const [activePreviewTab, setActivePreviewTab] = useState<"preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git">("files");
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [commandHistory, setCommandHistory] = useState<CommandExecution[]>([]);
   const [memoryBankStatus, setMemoryBankStatus] = useState<MemoryBankStatus | null>(null);
