@@ -12,6 +12,7 @@ interface ChatRequest {
   message: string;
   conversationHistory?: ChatMessage[];
   model?: string;
+  projectId?: string;
 }
 
 // Tipos para los eventos SSE
@@ -53,35 +54,107 @@ type SSEEvent =
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 
 /**
- * Carga el Memory Bank y construye el system prompt
+ * Carga el Memory Bank de un proyecto específico o el global
  */
-async function loadMemoryBankSystemPrompt(): Promise<string> {
+async function loadProjectMemoryBank(projectId?: string): Promise<{ exists: boolean; meta: string | null; files: Record<string, string>; consolidated: string; projectName?: string } | null> {
   try {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+
+    if (projectId) {
+      // Cargar Memory Bank del proyecto específico
+      const response = await fetch(`${baseUrl}/api/projects/${projectId}/memory-bank`, {
+        method: "GET",
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      return data.success ? data : null;
+    }
+
+    // Fallback al Memory Bank global
     const response = await fetch(`${baseUrl}/api/memory-bank`, {
       method: "GET",
     });
 
     const data = await response.json();
 
-    if (!data.success || !data.initialized) {
-      // Memory Bank no inicializado, retornar system prompt básico
-      return `Eres un asistente de desarrollo experto. Tienes acceso a herramientas para:
+    if (!data.success || !data.initialized) return null;
+
+    return {
+      exists: true,
+      meta: null,
+      files: {},
+      consolidated: data.consolidated || "",
+    };
+  } catch (error) {
+    console.error("[dev-chat] Error cargando Memory Bank:", error);
+    return null;
+  }
+}
+
+/**
+ * Carga el Memory Bank y construye el system prompt
+ */
+async function loadMemoryBankSystemPrompt(projectId?: string): Promise<string> {
+  const memoryBank = await loadProjectMemoryBank(projectId);
+
+  if (!memoryBank || !memoryBank.exists) {
+    // Memory Bank no inicializado, retornar system prompt básico
+    return `Eres un asistente de desarrollo experto. Tienes acceso a herramientas para:
 - Leer y escribir archivos del proyecto
 - Ejecutar comandos (npm, git, etc.)
 - Gestionar un Memory Bank para contexto persistente
 
 El Memory Bank NO está inicializado. Si el usuario menciona el proyecto, sugiere inicializar el Memory Bank para mantener contexto entre sesiones.`;
+  }
+
+  // Construir contexto del Memory Bank
+  let memoryBankContext = "";
+
+  // Si hay META, ponerlo primero con instrucciones especiales
+  if (memoryBank.meta) {
+    memoryBankContext += `## META-MEMORY-BANK.md (REGLAS CRÍTICAS)
+
+${memoryBank.meta}
+
+---
+
+`;
+  }
+
+  // Agregar el resto de archivos
+  if (memoryBank.files && Object.keys(memoryBank.files).length > 0) {
+    for (const [fileName, content] of Object.entries(memoryBank.files)) {
+      if (fileName !== "META-MEMORY-BANK.md") {
+        memoryBankContext += `## ${fileName}
+
+${content}
+
+---
+
+`;
+      }
     }
+  } else if (memoryBank.consolidated) {
+    memoryBankContext = memoryBank.consolidated;
+  }
 
-    // Memory Bank inicializado, incluir contexto
-    const memoryBankContext = data.consolidated || "";
+  const projectInfo = memoryBank.projectName ? `\nProyecto: ${memoryBank.projectName}\n` : "";
 
-    return `Eres un asistente de desarrollo experto trabajando en este proyecto.
-
+  return `Eres un asistente de desarrollo experto trabajando en este proyecto.
+${projectInfo}
 # MEMORY BANK - CONTEXTO DEL PROYECTO
 
+CRÍTICO: Antes de responder cualquier pregunta o implementar cualquier código:
+1. Lee el contexto del Memory Bank proporcionado abajo
+2. Sigue las reglas en META-MEMORY-BANK.md si existe
+3. Actualiza el Memory Bank si el comportamiento cambia
+
+=== MEMORY BANK CONTEXT ===
+
 ${memoryBankContext}
+=== END MEMORY BANK ===
 
 # INSTRUCCIONES PARA USO DEL MEMORY BANK
 
@@ -113,13 +186,9 @@ ${memoryBankContext}
 
 6. **Modo planificación**: Si el usuario dice "plan:", NO ejecutes nada, solo propón pasos. Espera "actúa" para ejecutar.
 
-7. **Mantén coherencia**: Usa el contexto del Memory Bank para dar respuestas coherentes con decisiones previas y el estado actual del proyecto.
+7. **Mantén coherencia**: Usa el contexto del Memory Bank para dar respuestas coherentes con decisiones previas y el estado actual del proyecto. SIEMPRE asegúrate de que el código coincida con las especificaciones del Memory Bank.
 
 Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y gestionar el Memory Bank. ¡Úsalas proactivamente!`;
-  } catch (error) {
-    console.error("[dev-chat] Error cargando Memory Bank para system prompt:", error);
-    return `Eres un asistente de desarrollo experto. Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y gestionar un Memory Bank para contexto persistente.`;
-  }
 }
 
 /**
@@ -303,11 +372,14 @@ export async function POST(req: NextRequest) {
 
     // 2. Parsear el body del request
     const body: ChatRequest = await req.json();
-    const { message, conversationHistory = [], model } = body;
+    const { message, conversationHistory = [], model, projectId } = body;
 
     // Usar el modelo del cliente o el default
     const claudeModel = model || DEFAULT_CLAUDE_MODEL;
     console.log("[dev-chat] Usando modelo:", claudeModel);
+    if (projectId) {
+      console.log("[dev-chat] Proyecto seleccionado:", projectId);
+    }
 
     // 3. Validar que exista el mensaje
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -320,8 +392,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Cargar el system prompt con contexto del Memory Bank
-    const systemPrompt = await loadMemoryBankSystemPrompt();
+    // 4. Cargar el system prompt con contexto del Memory Bank (del proyecto si está seleccionado)
+    const systemPrompt = await loadMemoryBankSystemPrompt(projectId);
     console.log("[dev-chat] System prompt cargado, longitud:", systemPrompt.length);
 
     // 5. Inicializar el cliente de Anthropic

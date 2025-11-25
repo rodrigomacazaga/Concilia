@@ -276,26 +276,77 @@ export async function runGitCommand(
   }
 }
 
-// Cargar Memory Bank de un proyecto
+export interface MemoryBankData {
+  exists: boolean;
+  meta: string | null;
+  files: Record<string, string>;
+  consolidated: string;
+  projectName?: string;
+}
+
+// Cargar Memory Bank de un proyecto (legacy - retorna string)
 export async function loadProjectMemoryBank(projectPath: string): Promise<string | null> {
+  const data = await loadProjectMemoryBankStructured(projectPath);
+  return data.exists ? data.consolidated : null;
+}
+
+// Cargar Memory Bank estructurado de un proyecto
+export async function loadProjectMemoryBankStructured(projectPath: string): Promise<MemoryBankData> {
   const mbPath = path.join(projectPath, "memory-bank");
 
   try {
     await fs.access(mbPath);
 
-    const files = await fs.readdir(mbPath);
-    const mdFiles = files.filter((f) => f.endsWith(".md"));
+    const allFiles = await fs.readdir(mbPath);
+    const mdFiles = allFiles.filter((f) => f.endsWith(".md"));
 
+    // Leer META primero si existe
+    const metaPath = path.join(mbPath, "META-MEMORY-BANK.md");
+    let meta: string | null = null;
+    try {
+      meta = await fs.readFile(metaPath, "utf-8");
+    } catch {
+      // META no existe
+    }
+
+    // Leer todos los archivos .md
+    const files: Record<string, string> = {};
     let consolidated = "";
 
-    for (const file of mdFiles) {
+    // Ordenar: META primero, luego numéricos, luego alfabéticos
+    const sortedFiles = mdFiles.sort((a, b) => {
+      if (a === "META-MEMORY-BANK.md") return -1;
+      if (b === "META-MEMORY-BANK.md") return 1;
+
+      // Extraer número del inicio si existe
+      const numA = parseInt(a.match(/^(\d+)/)?.[1] || "999");
+      const numB = parseInt(b.match(/^(\d+)/)?.[1] || "999");
+
+      if (numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    });
+
+    for (const file of sortedFiles) {
       const filePath = path.join(mbPath, file);
       const content = await fs.readFile(filePath, "utf-8");
+      files[file] = content;
+
+      // Construir consolidado
       consolidated += `\n\n## ${file}\n\n${content}`;
     }
 
-    return consolidated.trim();
+    return {
+      exists: true,
+      meta,
+      files,
+      consolidated: consolidated.trim(),
+    };
   } catch {
-    return null;
+    return {
+      exists: false,
+      meta: null,
+      files: {},
+      consolidated: "",
+    };
   }
 }
