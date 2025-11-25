@@ -14,7 +14,7 @@ import MemoryBankPanel from "@/app/components/memory-bank/MemoryBankPanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
 import { GripVertical, Key } from "lucide-react";
-import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey } from "@/app/components/ApiKeyModal";
+import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
 
 // Tipos
 interface Message {
@@ -117,6 +117,7 @@ function DevChatContent() {
         console.log("📚 Historial:", conversationHistory.length, "mensajes");
 
         const apiKey = getStoredApiKey();
+        const model = getStoredModel();
         const response = await fetch("/api/dev-chat", {
           method: "POST",
           headers: {
@@ -126,6 +127,7 @@ function DevChatContent() {
           body: JSON.stringify({
             message: userMessage,
             conversationHistory: conversationHistory,
+            model: model,
           }),
         });
 

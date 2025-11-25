@@ -11,6 +11,7 @@ interface ChatMessage {
 interface ChatRequest {
   message: string;
   conversationHistory?: ChatMessage[];
+  model?: string;
 }
 
 // Tipos para los eventos SSE
@@ -48,8 +49,8 @@ type SSEEvent =
   | SSECompleteEvent
   | SSEErrorEvent;
 
-// Modelo de Claude a utilizar - Claude Sonnet 4.5 (el más reciente y potente)
-const CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+// Modelo de Claude por defecto
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
 
 /**
  * Carga el Memory Bank y construye el system prompt
@@ -302,7 +303,11 @@ export async function POST(req: NextRequest) {
 
     // 2. Parsear el body del request
     const body: ChatRequest = await req.json();
-    const { message, conversationHistory = [] } = body;
+    const { message, conversationHistory = [], model } = body;
+
+    // Usar el modelo del cliente o el default
+    const claudeModel = model || DEFAULT_CLAUDE_MODEL;
+    console.log("[dev-chat] Usando modelo:", claudeModel);
 
     // 3. Validar que exista el mensaje
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -352,7 +357,7 @@ export async function POST(req: NextRequest) {
           while (continueLoop) {
             // 8. Crear mensaje con herramientas habilitadas y system prompt
             const response = await anthropic.messages.create({
-              model: CLAUDE_MODEL,
+              model: claudeModel,
               max_tokens: 4096,
               system: systemPrompt,
               messages: currentMessages,
