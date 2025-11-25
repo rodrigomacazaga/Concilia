@@ -286,16 +286,17 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. Validar que exista la API key de Anthropic
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    // 1. Obtener API key del header (enviada por el cliente) o del entorno
+    const clientApiKey = req.headers.get("x-api-key");
+    const apiKey = clientApiKey || process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "ANTHROPIC_API_KEY no está configurada en las variables de entorno",
+            "API key no proporcionada. Por favor configura tu API key de Anthropic.",
         },
-        { status: 500 }
+        { status: 401 }
       );
     }
 
