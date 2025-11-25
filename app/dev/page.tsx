@@ -7,6 +7,7 @@ import ChatInput from "@/app/components/chat/ChatInput";
 import ChatContainer from "@/app/components/chat/ChatContainer";
 import TypingIndicator from "@/app/components/chat/TypingIndicator";
 import NotificationToast from "@/app/components/preview/NotificationToast";
+import PreviewPanel from "@/app/components/preview/PreviewPanel";
 import ProjectSelector from "@/app/components/ProjectSelector";
 import ConversationHistory from "@/app/components/ConversationHistory";
 import MemoryBankViewer from "@/app/components/MemoryBankViewer";
@@ -45,6 +46,9 @@ function DevChatContent() {
     addFileChange,
     addCommand,
     updateCommand,
+    leftPanelSize,
+    setLeftPanelSize,
+    previewCollapsed,
   } = useDevContext();
 
   // Verificar API key al montar
@@ -60,6 +64,10 @@ function DevChatContent() {
   // Resize del panel derecho
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Resize del chat/preview
+  const [isResizingChat, setIsResizingChat] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Cargar conversación cuando se selecciona
   useEffect(() => {
@@ -314,23 +322,38 @@ function DevChatContent() {
     setIsResizing(true);
   }, []);
 
+  // Manejadores de resize para chat/preview
+  const handleChatResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingChat(true);
+  }, []);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !containerRef.current) return;
+      // Right panel resize
+      if (isResizing && containerRef.current) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newWidth = containerRect.right - e.clientX;
+        const clampedWidth = Math.min(Math.max(newWidth, 280), 500);
+        setRightPanelWidth(clampedWidth);
+      }
 
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const newWidth = containerRect.right - e.clientX;
-
-      // Limitar entre 280px y 500px
-      const clampedWidth = Math.min(Math.max(newWidth, 280), 500);
-      setRightPanelWidth(clampedWidth);
+      // Chat/Preview resize
+      if (isResizingChat && chatContainerRef.current) {
+        const containerRect = chatContainerRef.current.getBoundingClientRect();
+        const totalWidth = containerRect.width;
+        const newLeftWidth = e.clientX - containerRect.left;
+        const percentage = Math.min(Math.max((newLeftWidth / totalWidth) * 100, 30), 70);
+        setLeftPanelSize(percentage);
+      }
     };
 
     const handleMouseUp = () => {
       setIsResizing(false);
+      setIsResizingChat(false);
     };
 
-    if (isResizing) {
+    if (isResizing || isResizingChat) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "col-resize";
@@ -343,7 +366,7 @@ function DevChatContent() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing]);
+  }, [isResizing, isResizingChat, setLeftPanelSize]);
 
   return (
     <div ref={containerRef} className="flex h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
@@ -442,85 +465,115 @@ function DevChatContent() {
           </div>
         )}
 
-        {/* Chat Container */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <ChatContainer>
-            {!selectedProject ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="flex flex-col items-center justify-center h-full text-center py-12"
-              >
-                <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-orange-500"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+        {/* Chat + Preview Container */}
+        <div ref={chatContainerRef} className="flex-1 flex overflow-hidden">
+          {/* Chat Section */}
+          <div
+            className="flex flex-col overflow-hidden"
+            style={{ width: previewCollapsed ? "100%" : `${leftPanelSize}%` }}
+          >
+            <ChatContainer>
+              {!selectedProject ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex flex-col items-center justify-center h-full text-center py-12"
+                >
+                  <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                    <svg
+                      className="w-8 h-8 text-orange-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    Selecciona un proyecto
+                  </h2>
+                  <p className="text-gray-600 max-w-md">
+                    Elige un proyecto del panel izquierdo o crea uno nuevo para comenzar a trabajar con Claude.
+                  </p>
+                </motion.div>
+              ) : messages.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex flex-col items-center justify-center h-full text-center py-12"
+                >
+                  <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                    <svg
+                      className="w-8 h-8 text-orange-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                      />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                    ¡Hola! Soy Claude
+                  </h2>
+                  <p className="text-gray-600 max-w-md">
+                    Estoy aquí para ayudarte con tu desarrollo. Puedo leer, escribir y
+                    modificar archivos del proyecto. Pregúntame lo que necesites.
+                  </p>
+                </motion.div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      content={message.content}
+                      role={message.role}
+                      isStreaming={message.isStreaming}
                     />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Selecciona un proyecto
-                </h2>
-                <p className="text-gray-600 max-w-md">
-                  Elige un proyecto del panel izquierdo o crea uno nuevo para comenzar a trabajar con Claude.
-                </p>
-              </motion.div>
-            ) : messages.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-                className="flex flex-col items-center justify-center h-full text-center py-12"
-              >
-                <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-orange-500"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                    />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                  ¡Hola! Soy Claude
-                </h2>
-                <p className="text-gray-600 max-w-md">
-                  Estoy aquí para ayudarte con tu desarrollo. Puedo leer, escribir y
-                  modificar archivos del proyecto. Pregúntame lo que necesites.
-                </p>
-              </motion.div>
-            ) : (
-              <>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    content={message.content}
-                    role={message.role}
-                    isStreaming={message.isStreaming}
-                  />
-                ))}
-                {isLoading && !streamingMessageId && <TypingIndicator />}
-              </>
-            )}
-          </ChatContainer>
+                  ))}
+                  {isLoading && !streamingMessageId && <TypingIndicator />}
+                </>
+              )}
+            </ChatContainer>
 
-          {/* Input */}
-          <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !selectedProject} />
+            {/* Input */}
+            <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !selectedProject} />
+          </div>
+
+          {/* Resize handle for Chat/Preview */}
+          {!previewCollapsed && selectedProject && (
+            <div
+              onMouseDown={handleChatResizeMouseDown}
+              className={`w-1 bg-gray-200 hover:bg-orange-400 cursor-col-resize flex items-center justify-center transition-colors ${
+                isResizingChat ? "bg-orange-400" : ""
+              }`}
+            >
+              <div className="p-0.5 bg-white rounded shadow-sm">
+                <GripVertical className="w-3 h-3 text-gray-400" />
+              </div>
+            </div>
+          )}
+
+          {/* Preview Panel */}
+          {selectedProject && (
+            <div
+              className="overflow-hidden"
+              style={{ width: previewCollapsed ? "auto" : `${100 - leftPanelSize}%` }}
+            >
+              <PreviewPanel />
+            </div>
+          )}
         </div>
       </div>
 
