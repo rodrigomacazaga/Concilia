@@ -1,15 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { Monitor, FolderTree, History, Terminal, RefreshCw, X } from "lucide-react";
+import {
+  Monitor,
+  FolderTree,
+  History,
+  Terminal,
+  RefreshCw,
+  X,
+  MessageSquare,
+  BookOpen,
+  GitBranch,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { useDevContext } from "@/app/lib/DevContext";
 import FileExplorer from "./FileExplorer";
 import ChangesList from "./ChangesList";
 import CodeViewer from "./CodeViewer";
 import TerminalOutput from "./TerminalOutput";
+import ConversationHistory from "@/app/components/ConversationHistory";
+import MemoryBankViewer from "@/app/components/MemoryBankViewer";
+import GitPanel from "@/app/components/GitPanel";
 
-export default function PreviewPanel() {
+interface PreviewPanelProps {
+  projectId?: string | null;
+  selectedConversation?: string | null;
+  onSelectConversation?: (id: string | null) => void;
+}
+
+type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git";
+
+export default function PreviewPanel({
+  projectId,
+  selectedConversation,
+  onSelectConversation,
+}: PreviewPanelProps) {
   const {
     activePreviewTab,
     setActivePreviewTab,
@@ -24,26 +49,41 @@ export default function PreviewPanel() {
 
   const tabs = [
     {
-      id: "preview" as const,
+      id: "preview" as TabId,
       label: "Preview",
       icon: Monitor,
     },
     {
-      id: "files" as const,
+      id: "files" as TabId,
       label: "Archivos",
       icon: FolderTree,
     },
     {
-      id: "changes" as const,
+      id: "changes" as TabId,
       label: "Cambios",
       icon: History,
       badge: fileChanges.length > 0 ? fileChanges.length : undefined,
     },
     {
-      id: "terminal" as const,
+      id: "terminal" as TabId,
       label: "Terminal",
       icon: Terminal,
       badge: commandHistory.length > 0 ? commandHistory.length : undefined,
+    },
+    {
+      id: "chats" as TabId,
+      label: "Chats",
+      icon: MessageSquare,
+    },
+    {
+      id: "memory-bank" as TabId,
+      label: "MB",
+      icon: BookOpen,
+    },
+    {
+      id: "git" as TabId,
+      label: "Git",
+      icon: GitBranch,
     },
   ];
 
@@ -53,12 +93,12 @@ export default function PreviewPanel() {
 
   if (previewCollapsed) {
     return (
-      <div className="flex items-center justify-center bg-gray-100 border-l border-claude-border">
+      <div className="flex items-center justify-center bg-gray-100 border-l border-claude-border h-full">
         <button
           onClick={() => setPreviewCollapsed(false)}
           className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
         >
-          Mostrar Preview
+          Mostrar Panel
         </button>
       </div>
     );
@@ -68,7 +108,7 @@ export default function PreviewPanel() {
     <div className="flex flex-col h-full bg-white">
       {/* Tabs Header */}
       <div className="flex items-center justify-between border-b border-claude-border bg-claude-beige/20">
-        <div className="flex items-center">
+        <div className="flex items-center overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activePreviewTab === tab.id;
@@ -77,17 +117,17 @@ export default function PreviewPanel() {
               <button
                 key={tab.id}
                 onClick={() => setActivePreviewTab(tab.id)}
-                className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+                className={`relative px-3 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   isActive
                     ? "text-claude-orange border-b-2 border-claude-orange"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
+                <div className="flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{tab.label}</span>
                   {tab.badge !== undefined && (
-                    <span className="px-1.5 py-0.5 text-xs font-semibold text-white bg-claude-orange rounded-full">
+                    <span className="px-1 py-0.5 text-[10px] font-semibold text-white bg-claude-orange rounded-full min-w-[16px] text-center">
                       {tab.badge}
                     </span>
                   )}
@@ -97,23 +137,23 @@ export default function PreviewPanel() {
           })}
         </div>
 
-        <div className="flex items-center gap-2 px-4">
+        <div className="flex items-center gap-1 px-2 flex-shrink-0">
           {activePreviewTab === "preview" && (
             <button
               onClick={handleRefresh}
-              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
               title="Refrescar preview"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-3.5 h-3.5" />
             </button>
           )}
 
           <button
             onClick={() => setPreviewCollapsed(true)}
-            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
             title="Colapsar panel"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -140,11 +180,11 @@ export default function PreviewPanel() {
 
           {activePreviewTab === "files" && (
             <div className="h-full flex">
-              <div className="w-1/2 overflow-auto">
+              <div className={selectedFile ? "w-1/2 overflow-auto" : "w-full overflow-auto"}>
                 <FileExplorer />
               </div>
               {selectedFile && (
-                <div className="w-1/2">
+                <div className="w-1/2 border-l">
                   <CodeViewer
                     filePath={selectedFile.path}
                     content={selectedFile.content}
@@ -161,6 +201,42 @@ export default function PreviewPanel() {
           {activePreviewTab === "changes" && <ChangesList />}
 
           {activePreviewTab === "terminal" && <TerminalOutput />}
+
+          {activePreviewTab === "chats" && projectId && (
+            <ConversationHistory
+              projectId={projectId}
+              onSelect={onSelectConversation || (() => {})}
+              selected={selectedConversation || null}
+            />
+          )}
+
+          {activePreviewTab === "chats" && !projectId && (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              Selecciona un proyecto para ver las conversaciones
+            </div>
+          )}
+
+          {activePreviewTab === "memory-bank" && projectId && (
+            <MemoryBankViewer projectId={projectId} />
+          )}
+
+          {activePreviewTab === "memory-bank" && !projectId && (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              Selecciona un proyecto para ver el Memory Bank
+            </div>
+          )}
+
+          {activePreviewTab === "git" && projectId && (
+            <div className="h-full overflow-y-auto p-4">
+              <GitPanel projectId={projectId} />
+            </div>
+          )}
+
+          {activePreviewTab === "git" && !projectId && (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              Selecciona un proyecto para ver Git
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

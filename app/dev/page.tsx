@@ -9,13 +9,9 @@ import TypingIndicator from "@/app/components/chat/TypingIndicator";
 import NotificationToast from "@/app/components/preview/NotificationToast";
 import PreviewPanel from "@/app/components/preview/PreviewPanel";
 import ProjectSelector from "@/app/components/ProjectSelector";
-import ConversationHistory from "@/app/components/ConversationHistory";
-import MemoryBankViewer from "@/app/components/MemoryBankViewer";
-import GitPanel from "@/app/components/GitPanel";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/app/components/ui/Tabs";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
-import { GripVertical, Key, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, MessageSquare, BookOpen, GitBranch } from "lucide-react";
+import { GripVertical, Key, PanelLeftClose, PanelLeft } from "lucide-react";
 import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
 
 // Tipos
@@ -35,8 +31,6 @@ function DevChatContent() {
 
   // Paneles
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
-  const [rightPanelWidth, setRightPanelWidth] = useState(320);
 
   // Proyecto y conversación seleccionados
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
@@ -60,10 +54,6 @@ function DevChatContent() {
 
   // State para tracking de comandos en progreso
   const [runningCommands, setRunningCommands] = useState<Record<string, string>>({});
-
-  // Resize del panel derecho
-  const [isResizing, setIsResizing] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Resize del chat/preview
   const [isResizingChat, setIsResizingChat] = useState(false);
@@ -316,12 +306,6 @@ function DevChatContent() {
     [messages, addFileChange, selectedProject, runningCommands, addCommand, updateCommand]
   );
 
-  // Manejadores de resize para el panel derecho
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  }, []);
-
   // Manejadores de resize para chat/preview
   const handleChatResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -330,15 +314,6 @@ function DevChatContent() {
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Right panel resize
-      if (isResizing && containerRef.current) {
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const newWidth = containerRect.right - e.clientX;
-        const clampedWidth = Math.min(Math.max(newWidth, 280), 500);
-        setRightPanelWidth(clampedWidth);
-      }
-
-      // Chat/Preview resize
       if (isResizingChat && chatContainerRef.current) {
         const containerRect = chatContainerRef.current.getBoundingClientRect();
         const totalWidth = containerRect.width;
@@ -349,11 +324,10 @@ function DevChatContent() {
     };
 
     const handleMouseUp = () => {
-      setIsResizing(false);
       setIsResizingChat(false);
     };
 
-    if (isResizing || isResizingChat) {
+    if (isResizingChat) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
       document.body.style.cursor = "col-resize";
@@ -366,10 +340,10 @@ function DevChatContent() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing, isResizingChat, setLeftPanelSize]);
+  }, [isResizingChat, setLeftPanelSize]);
 
   return (
-    <div ref={containerRef} className="flex h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
+    <div className="flex h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
       {/* Panel Izquierdo - Proyectos */}
       {leftPanelOpen && (
         <div className="w-64 border-r bg-white flex-shrink-0 flex flex-col">
@@ -417,32 +391,17 @@ function DevChatContent() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    clearStoredApiKey();
-                    router.push("/");
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Cambiar API Key"
-                >
-                  <Key className="w-4 h-4" />
-                  <span className="hidden sm:inline">API Key</span>
-                </button>
-                {selectedProject && (
-                  <button
-                    onClick={() => setRightPanelOpen(!rightPanelOpen)}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-                    title={rightPanelOpen ? "Ocultar panel" : "Mostrar panel"}
-                  >
-                    {rightPanelOpen ? (
-                      <PanelRightClose className="w-5 h-5 text-gray-500" />
-                    ) : (
-                      <PanelRight className="w-5 h-5 text-gray-500" />
-                    )}
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => {
+                  clearStoredApiKey();
+                  router.push("/");
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Cambiar API Key"
+              >
+                <Key className="w-4 h-4" />
+                <span className="hidden sm:inline">API Key</span>
+              </button>
             </div>
           </div>
         </motion.header>
@@ -571,66 +530,15 @@ function DevChatContent() {
               className="overflow-hidden"
               style={{ width: previewCollapsed ? "auto" : `${100 - leftPanelSize}%` }}
             >
-              <PreviewPanel />
+              <PreviewPanel
+                projectId={selectedProject}
+                selectedConversation={selectedConversation}
+                onSelectConversation={setSelectedConversation}
+              />
             </div>
           )}
         </div>
       </div>
-
-      {/* Resize handle para panel derecho */}
-      {rightPanelOpen && selectedProject && (
-        <div
-          onMouseDown={handleResizeMouseDown}
-          className={`w-1 bg-gray-200 hover:bg-orange-400 cursor-col-resize flex items-center justify-center transition-colors ${
-            isResizing ? "bg-orange-400" : ""
-          }`}
-        >
-          <div className="p-0.5 bg-white rounded shadow-sm">
-            <GripVertical className="w-3 h-3 text-gray-400" />
-          </div>
-        </div>
-      )}
-
-      {/* Panel Derecho - Tabs */}
-      {rightPanelOpen && selectedProject && (
-        <div
-          className="border-l bg-white flex-shrink-0 flex flex-col"
-          style={{ width: rightPanelWidth }}
-        >
-          <Tabs defaultValue="conversations" className="flex-1 flex flex-col">
-            <TabsList>
-              <TabsTrigger value="conversations">
-                <MessageSquare className="w-4 h-4 mr-1.5" />
-                <span className="hidden lg:inline">Chats</span>
-              </TabsTrigger>
-              <TabsTrigger value="memory-bank">
-                <BookOpen className="w-4 h-4 mr-1.5" />
-                <span className="hidden lg:inline">MB</span>
-              </TabsTrigger>
-              <TabsTrigger value="git">
-                <GitBranch className="w-4 h-4 mr-1.5" />
-                <span className="hidden lg:inline">Git</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="conversations" className="flex-1 overflow-hidden">
-              <ConversationHistory
-                projectId={selectedProject}
-                onSelect={setSelectedConversation}
-                selected={selectedConversation}
-              />
-            </TabsContent>
-
-            <TabsContent value="memory-bank" className="flex-1 overflow-hidden">
-              <MemoryBankViewer projectId={selectedProject} />
-            </TabsContent>
-
-            <TabsContent value="git" className="flex-1 overflow-y-auto p-4">
-              <GitPanel projectId={selectedProject} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      )}
 
       {/* Notificaciones */}
       <NotificationToast />
