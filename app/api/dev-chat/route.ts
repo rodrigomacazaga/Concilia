@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_TOOLS } from "@/lib/file-operations-types";
+import { getProject } from "@/lib/projects";
+import { buildMemoryBankContext } from "@/lib/hierarchical-memory-bank";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -13,6 +15,7 @@ interface ChatRequest {
   conversationHistory?: ChatMessage[];
   model?: string;
   projectId?: string;
+  currentService?: string; // Servicio actual para cargar contexto local
 }
 
 // Tipos para los eventos SSE
@@ -95,8 +98,53 @@ async function loadProjectMemoryBank(projectId?: string): Promise<{ exists: bool
 
 /**
  * Carga el Memory Bank y construye el system prompt
+ * Ahora soporta Memory Bank jerárquico (general + local por servicio)
  */
-async function loadMemoryBankSystemPrompt(projectId?: string): Promise<string> {
+async function loadMemoryBankSystemPrompt(projectId?: string, currentService?: string): Promise<string> {
+  // Intentar cargar Memory Bank jerárquico primero si hay projectId
+  if (projectId) {
+    try {
+      const project = await getProject(projectId);
+      if (project?.path) {
+        const hierarchicalContext = await buildMemoryBankContext(
+          project.path,
+          project.name,
+          currentService
+        );
+
+        if (hierarchicalContext && hierarchicalContext.includes("=== MEMORY BANK")) {
+          return `Eres un asistente de desarrollo experto trabajando en este proyecto.
+
+Proyecto: ${project.name}
+${currentService ? `Servicio actual: ${currentService}` : ""}
+
+${hierarchicalContext}
+
+# INSTRUCCIONES PARA USO DEL MEMORY BANK JERÁRQUICO
+
+1. **Memory Bank General**: Contiene visión de alto nivel del proyecto y documentación consolidada
+2. **Memory Bank Local**: Cada servicio tiene su propio Memory Bank con detalle específico
+3. **Sincronización**: Los cambios en Memory Banks locales se sincronizan automáticamente al general
+
+## Al trabajar en un servicio:
+- Lee primero el Memory Bank LOCAL del servicio
+- Actualiza el Memory Bank LOCAL cuando hagas cambios
+- El sync al general es automático
+
+## Herramientas disponibles:
+- read_file, write_file, list_files: Para archivos del proyecto
+- execute_command: Para comandos npm, git, etc.
+- read_memory_bank, update_memory_bank: Para el Memory Bank
+
+Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y gestionar el Memory Bank. ¡Úsalas proactivamente!`;
+        }
+      }
+    } catch (error) {
+      console.error("[dev-chat] Error cargando Memory Bank jerárquico:", error);
+    }
+  }
+
+  // Fallback al Memory Bank tradicional
   const memoryBank = await loadProjectMemoryBank(projectId);
 
   if (!memoryBank || !memoryBank.exists) {
@@ -372,13 +420,16 @@ export async function POST(req: NextRequest) {
 
     // 2. Parsear el body del request
     const body: ChatRequest = await req.json();
-    const { message, conversationHistory = [], model, projectId } = body;
+    const { message, conversationHistory = [], model, projectId, currentService } = body;
 
     // Usar el modelo del cliente o el default
     const claudeModel = model || DEFAULT_CLAUDE_MODEL;
     console.log("[dev-chat] Usando modelo:", claudeModel);
     if (projectId) {
       console.log("[dev-chat] Proyecto seleccionado:", projectId);
+    }
+    if (currentService) {
+      console.log("[dev-chat] Servicio actual:", currentService);
     }
 
     // 3. Validar que exista el mensaje
@@ -392,8 +443,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Cargar el system prompt con contexto del Memory Bank (del proyecto si está seleccionado)
-    const systemPrompt = await loadMemoryBankSystemPrompt(projectId);
+    // 4. Cargar el system prompt con contexto del Memory Bank (del proyecto y servicio si están seleccionados)
+    const systemPrompt = await loadMemoryBankSystemPrompt(projectId, currentService);
     console.log("[dev-chat] System prompt cargado, longitud:", systemPrompt.length);
 
     // 5. Inicializar el cliente de Anthropic

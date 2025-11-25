@@ -32,9 +32,10 @@ function DevChatContent() {
   // Paneles
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 
-  // Proyecto y conversación seleccionados
+  // Proyecto, conversación y servicio seleccionados
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [currentService, setCurrentService] = useState<string | null>(null);
 
   const {
     addFileChange,
@@ -137,6 +138,7 @@ function DevChatContent() {
             conversationHistory: conversationHistory,
             model: model,
             projectId: selectedProject,
+            currentService: currentService,
           }),
         });
 
@@ -303,7 +305,7 @@ function DevChatContent() {
         setIsLoading(false);
       }
     },
-    [messages, addFileChange, selectedProject, runningCommands, addCommand, updateCommand]
+    [messages, addFileChange, selectedProject, currentService, runningCommands, addCommand, updateCommand]
   );
 
   // Manejadores de resize para chat/preview
@@ -351,6 +353,7 @@ function DevChatContent() {
             onSelect={(id) => {
               setSelectedProject(id);
               setSelectedConversation(null);
+              setCurrentService(null);
               setMessages([]);
             }}
             selected={selectedProject}
@@ -534,6 +537,8 @@ function DevChatContent() {
                 projectId={selectedProject}
                 selectedConversation={selectedConversation}
                 onSelectConversation={setSelectedConversation}
+                currentService={currentService}
+                onServiceSelect={setCurrentService}
               />
             </div>
           )}
