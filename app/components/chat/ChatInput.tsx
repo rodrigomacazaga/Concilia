@@ -120,11 +120,11 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
             }}
           />
 
-          {/* Botón de enviar dentro del input */}
+          {/* Botón de enviar dentro del input - centrado verticalmente */}
           <button
             onClick={handleSend}
             disabled={disabled || !message.trim()}
-            className="absolute right-2 bottom-2 w-9 h-9 rounded-lg bg-claude-orange text-white
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg bg-claude-orange text-white
                      flex items-center justify-center transition-all
                      disabled:opacity-30 disabled:cursor-not-allowed
                      hover:bg-orange-600 active:bg-orange-700"

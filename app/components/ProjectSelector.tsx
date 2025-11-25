@@ -10,7 +10,11 @@ import {
   Trash2,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  Edit3,
+  AlertCircle,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Project {
   id: string;
@@ -21,6 +25,11 @@ interface Project {
   memoryBankPath?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface MemoryBankFile {
+  name: string;
+  content: string;
 }
 
 interface ProjectSelectorProps {
@@ -40,9 +49,29 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
   });
   const [addLoading, setAddLoading] = useState(false);
 
+  // Memory Bank state
+  const [memoryBankOpen, setMemoryBankOpen] = useState(false);
+  const [memoryBankFiles, setMemoryBankFiles] = useState<MemoryBankFile[]>([]);
+  const [memoryBankExists, setMemoryBankExists] = useState(false);
+  const [memoryBankLoading, setMemoryBankLoading] = useState(false);
+  const [selectedMBFile, setSelectedMBFile] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // Load Memory Bank when project changes
+  useEffect(() => {
+    if (selected) {
+      loadMemoryBank(selected);
+    } else {
+      setMemoryBankFiles([]);
+      setMemoryBankExists(false);
+      setSelectedMBFile(null);
+    }
+  }, [selected]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -57,6 +86,31 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
       console.error("Error loading projects:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMemoryBank = async (projectId: string) => {
+    setMemoryBankLoading(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/memory-bank?cache=false`);
+      const data = await response.json();
+
+      if (data.success && data.exists) {
+        setMemoryBankExists(true);
+        const files = Object.entries(data.files || {}).map(([name, content]) => ({
+          name,
+          content: content as string,
+        }));
+        setMemoryBankFiles(files);
+      } else {
+        setMemoryBankExists(false);
+        setMemoryBankFiles([]);
+      }
+    } catch (error) {
+      console.error("Error loading memory bank:", error);
+      setMemoryBankExists(false);
+    } finally {
+      setMemoryBankLoading(false);
     }
   };
 
@@ -106,6 +160,39 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
     }
   };
 
+  const handleSelectMBFile = (fileName: string) => {
+    const file = memoryBankFiles.find((f) => f.name === fileName);
+    if (file) {
+      setSelectedMBFile(fileName);
+      setEditingContent(file.content);
+    }
+  };
+
+  const handleSaveMBFile = async () => {
+    if (!selected || !selectedMBFile) return;
+
+    setIsSaving(true);
+    try {
+      await fetch(`/api/projects/${selected}/memory-bank`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: selectedMBFile,
+          content: editingContent,
+        }),
+      });
+
+      // Reload memory bank
+      await loadMemoryBank(selected);
+    } catch (error) {
+      console.error("Error saving memory bank file:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const selectedProject = projects.find((p) => p.id === selected);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -136,6 +223,137 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
           </div>
         </div>
       </div>
+
+      {/* Selected project with Memory Bank dropdown */}
+      {selectedProject && (
+        <div className="border-b bg-orange-50">
+          <div className="p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-orange-600" />
+                <span className="font-medium text-orange-800 truncate">
+                  {selectedProject.name}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  onSelect(null);
+                  setMemoryBankOpen(false);
+                }}
+                className="text-xs text-orange-600 hover:text-orange-800"
+              >
+                Cambiar
+              </button>
+            </div>
+
+            {/* Memory Bank dropdown trigger */}
+            <button
+              onClick={() => setMemoryBankOpen(!memoryBankOpen)}
+              disabled={memoryBankLoading}
+              className="mt-2 w-full flex items-center justify-between px-2 py-1.5 text-xs rounded-md
+                       bg-white border border-orange-200 hover:border-orange-300 transition-colors"
+            >
+              <div className="flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-orange-500" />
+                <span className="text-gray-700">
+                  {memoryBankLoading
+                    ? "Cargando..."
+                    : memoryBankExists
+                    ? `Memory Bank (${memoryBankFiles.length} archivos)`
+                    : "Sin Memory Bank"}
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-gray-400 transition-transform ${
+                  memoryBankOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Memory Bank dropdown content */}
+          <AnimatePresence>
+            {memoryBankOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden border-t border-orange-200"
+              >
+                <div className="bg-white max-h-64 overflow-y-auto">
+                  {!memoryBankExists ? (
+                    <div className="p-3 text-center">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm text-gray-500">
+                        No hay Memory Bank
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Crea una carpeta <code className="bg-gray-100 px-1 rounded">memory-bank/</code> en el proyecto
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {memoryBankFiles.map((file) => (
+                        <button
+                          key={file.name}
+                          onClick={() => handleSelectMBFile(file.name)}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-gray-50 ${
+                            selectedMBFile === file.name ? "bg-orange-50" : ""
+                          }`}
+                        >
+                          <BookOpen
+                            className={`w-3.5 h-3.5 flex-shrink-0 ${
+                              file.name === "META-MEMORY-BANK.md"
+                                ? "text-orange-500"
+                                : "text-gray-400"
+                            }`}
+                          />
+                          <span className="truncate">
+                            {file.name.replace(".md", "")}
+                          </span>
+                          <Edit3 className="w-3 h-3 ml-auto text-gray-300" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Editor inline */}
+                  {selectedMBFile && (
+                    <div className="border-t p-2 bg-gray-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-600">
+                          {selectedMBFile}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setSelectedMBFile(null)}
+                            className="px-2 py-0.5 text-xs text-gray-500 hover:text-gray-700"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={handleSaveMBFile}
+                            disabled={isSaving}
+                            className="px-2 py-0.5 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+                          >
+                            {isSaving ? "..." : "Guardar"}
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="w-full h-32 text-xs font-mono border rounded p-2 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Add form */}
       {showAddForm && (
@@ -181,105 +399,100 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
         </form>
       )}
 
-      {/* Project list */}
-      <div className="flex-1 overflow-y-auto">
-        {loading && projects.length === 0 ? (
-          <div className="flex items-center justify-center p-8 text-gray-400">
-            <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-            Cargando...
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="p-4 text-center text-gray-500 text-sm">
-            <FolderOpen className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-            <p>No hay proyectos</p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="mt-2 text-orange-500 hover:underline"
-            >
-              Agregar proyecto
-            </button>
-          </div>
-        ) : (
-          <div className="p-2 space-y-1">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className={`group rounded-lg transition-colors ${
-                  selected === project.id
-                    ? "bg-orange-100"
-                    : "hover:bg-gray-100"
-                }`}
+      {/* Project list (only show when no project is selected) */}
+      {!selected && (
+        <div className="flex-1 overflow-y-auto">
+          {loading && projects.length === 0 ? (
+            <div className="flex items-center justify-center p-8 text-gray-400">
+              <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+              Cargando...
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="p-4 text-center text-gray-500 text-sm">
+              <FolderOpen className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <p>No hay proyectos</p>
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="mt-2 text-orange-500 hover:underline"
               >
-                <button
-                  onClick={() => onSelect(project.id)}
-                  className="w-full text-left p-3"
+                Agregar proyecto
+              </button>
+            </div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  className="group rounded-lg transition-colors hover:bg-gray-100"
                 >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`font-medium truncate ${
-                        selected === project.id ? "text-orange-800" : "text-gray-800"
-                      }`}
-                    >
-                      {project.name}
-                    </span>
-                    {selected === project.id && (
-                      <ChevronRight className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                    )}
-                  </div>
-
-                  {/* Indicators */}
-                  <div className="flex items-center gap-2 mt-1">
-                    {project.gitUrl && (
-                      <span className="flex items-center text-xs text-gray-500">
-                        <GitBranch className="w-3 h-3 mr-0.5" />
-                        Git
+                  <button
+                    onClick={() => onSelect(project.id)}
+                    className="w-full text-left p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-800 truncate">
+                        {project.name}
                       </span>
-                    )}
-                    {project.memoryBankPath && (
-                      <span className="flex items-center text-xs text-orange-500">
-                        <BookOpen className="w-3 h-3 mr-0.5" />
-                        MB
-                      </span>
-                    )}
-                  </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    </div>
 
-                  {project.description && (
-                    <p className="text-xs text-gray-500 mt-1 truncate">
-                      {project.description}
-                    </p>
-                  )}
-                </button>
+                    {/* Indicators */}
+                    <div className="flex items-center gap-2 mt-1">
+                      {project.gitUrl && (
+                        <span className="flex items-center text-xs text-gray-500">
+                          <GitBranch className="w-3 h-3 mr-0.5" />
+                          Git
+                        </span>
+                      )}
+                      {project.memoryBankPath && (
+                        <span className="flex items-center text-xs text-orange-500">
+                          <BookOpen className="w-3 h-3 mr-0.5" />
+                          MB
+                        </span>
+                      )}
+                    </div>
 
-                {/* Actions (visible on hover) */}
-                <div className="hidden group-hover:flex items-center gap-1 px-3 pb-2">
-                  {project.path && (
+                    {project.description && (
+                      <p className="text-xs text-gray-500 mt-1 truncate">
+                        {project.description}
+                      </p>
+                    )}
+                  </button>
+
+                  {/* Actions (visible on hover) */}
+                  <div className="hidden group-hover:flex items-center gap-1 px-3 pb-2">
+                    {project.path && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(project.path);
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+                        title="Copiar ruta"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigator.clipboard.writeText(project.path);
+                        handleDeleteProject(project.id);
                       }}
-                      className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
-                      title="Copiar ruta"
+                      className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600"
+                      title="Eliminar proyecto"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteProject(project.id);
-                    }}
-                    className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600"
-                    title="Eliminar proyecto"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Spacer when project is selected */}
+      {selected && <div className="flex-1" />}
     </div>
   );
 }
