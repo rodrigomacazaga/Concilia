@@ -2,18 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Key, X, ExternalLink, Eye, EyeOff, AlertCircle, CheckCircle, ChevronRight, Cpu } from "lucide-react";
+import { Key, X, ExternalLink, Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 
 interface ApiKeyModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-interface ModelOption {
-  id: string;
-  name: string;
-  created_at: string;
 }
 
 const API_KEY_STORAGE_KEY = "anthropic_api_key";
@@ -50,28 +44,18 @@ export function setStoredModel(model: string): void {
 }
 
 export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalProps) {
-  const [step, setStep] = useState<1 | 2>(1);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Estado para modelos
-  const [models, setModels] = useState<ModelOption[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>("");
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
-
-  // Cargar key y modelo existente si hay
+  // Cargar key existente si hay
   useEffect(() => {
     if (isOpen) {
       const storedKey = getStoredApiKey();
-      const storedModel = getStoredModel();
       if (storedKey) {
         setApiKey(storedKey);
-      }
-      if (storedModel) {
-        setSelectedModel(storedModel);
       }
     }
   }, [isOpen]);
@@ -82,8 +66,6 @@ export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalP
       setError(null);
       setSuccess(false);
       setIsValidating(false);
-      setStep(1);
-      setModels([]);
     }
   }, [isOpen]);
 
@@ -103,52 +85,7 @@ export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalP
     return true;
   };
 
-  const fetchModels = async (key: string) => {
-    setIsLoadingModels(true);
-    try {
-      const response = await fetch("/api/models", {
-        method: "GET",
-        headers: {
-          "x-api-key": key,
-        },
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.models?.length > 0) {
-        setModels(data.models);
-        // Si no hay modelo seleccionado, seleccionar el primero
-        if (!selectedModel || !data.models.find((m: ModelOption) => m.id === selectedModel)) {
-          setSelectedModel(data.models[0].id);
-        }
-      } else {
-        // Si falla, usar modelos por defecto
-        setModels([
-          { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", created_at: "" },
-          { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", created_at: "" },
-          { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", created_at: "" },
-        ]);
-        if (!selectedModel) {
-          setSelectedModel("claude-sonnet-4-5-20250929");
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching models:", err);
-      // Usar modelos por defecto
-      setModels([
-        { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", created_at: "" },
-        { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", created_at: "" },
-        { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", created_at: "" },
-      ]);
-      if (!selectedModel) {
-        setSelectedModel("claude-sonnet-4-5-20250929");
-      }
-    } finally {
-      setIsLoadingModels(false);
-    }
-  };
-
-  const handleApiKeySubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -171,30 +108,22 @@ export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalP
 
       if (data.valid) {
         setStoredApiKey(apiKey);
-        // Ir al paso 2 para seleccionar modelo
-        setStep(2);
-        fetchModels(apiKey);
+        setSuccess(true);
+        setTimeout(() => {
+          onSuccess();
+        }, 500);
       } else {
         setError(data.error || "API key inválida. Verifica que esté correcta.");
       }
     } catch (err) {
       console.error("Error validando API key:", err);
-      // Si falla la validación, continuamos de todas formas
       setStoredApiKey(apiKey);
-      setStep(2);
-      fetchModels(apiKey);
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const handleModelSubmit = () => {
-    if (selectedModel) {
-      setStoredModel(selectedModel);
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
       }, 500);
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -221,15 +150,11 @@ export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalP
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
-                    {step === 1 ? <Key className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
+                    <Key className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold">
-                      {step === 1 ? "API Key de Anthropic" : "Selecciona el Modelo"}
-                    </h2>
-                    <p className="text-sm text-white/80">
-                      {step === 1 ? "Paso 1 de 2 - Autenticación" : "Paso 2 de 2 - Configuración"}
-                    </p>
+                    <h2 className="text-xl font-bold">API Key de Anthropic</h2>
+                    <p className="text-sm text-white/80">Requerida para usar Claude</p>
                   </div>
                 </div>
                 <button
@@ -241,190 +166,116 @@ export default function ApiKeyModal({ isOpen, onClose, onSuccess }: ApiKeyModalP
               </div>
             </div>
 
-            {/* Step 1: API Key */}
-            {step === 1 && (
-              <form onSubmit={handleApiKeySubmit} className="p-6 space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                  <p className="mb-2">
-                    Tu API key se guarda localmente en tu navegador y se usa para comunicarse directamente con Claude.
-                  </p>
-                  <a
-                    href="https://console.anthropic.com/settings/keys"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Obtener API key en Anthropic Console
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">
-                    API Key
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showKey ? "text" : "password"}
-                      id="apiKey"
-                      value={apiKey}
-                      onChange={(e) => {
-                        setApiKey(e.target.value);
-                        setError(null);
-                      }}
-                      placeholder="sk-ant-api03-..."
-                      className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                        error
-                          ? "border-red-300 focus:ring-red-500"
-                          : "border-gray-300 focus:ring-orange-500"
-                      }`}
-                      disabled={isValidating}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      tabIndex={-1}
-                    >
-                      {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg"
-                  >
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>{error}</span>
-                  </motion.div>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                    disabled={isValidating}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isValidating || !apiKey.trim()}
-                    className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isValidating ? (
-                      <>
-                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Validando...
-                      </>
-                    ) : (
-                      <>
-                        Continuar
-                        <ChevronRight className="w-5 h-5" />
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <p className="text-xs text-gray-500 text-center pt-2">
-                  Tu API key nunca se envía a nuestros servidores, solo a Anthropic.
+            {/* Body */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                <p className="mb-2">
+                  Tu API key se guarda localmente en tu navegador y se usa para comunicarse directamente con Claude.
                 </p>
-              </form>
-            )}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Obtener API key en Anthropic Console
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
 
-            {/* Step 2: Model Selection */}
-            {step === 2 && (
-              <div className="p-6 space-y-4">
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm text-purple-800">
-                  <p>
-                    Selecciona el modelo de Claude que deseas usar. Los modelos más recientes suelen tener mejores capacidades.
-                  </p>
-                </div>
-
-                {isLoadingModels ? (
-                  <div className="flex items-center justify-center py-8">
-                    <svg className="animate-spin h-8 w-8 text-orange-500" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Modelo de Claude
-                    </label>
-                    <div className="space-y-2">
-                      {models.map((model) => (
-                        <button
-                          key={model.id}
-                          type="button"
-                          onClick={() => setSelectedModel(model.id)}
-                          className={`w-full p-4 border rounded-lg text-left transition-all ${
-                            selectedModel === model.id
-                              ? "border-orange-500 bg-orange-50 ring-2 ring-orange-500"
-                              : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-gray-900">{model.name}</p>
-                              <p className="text-xs text-gray-500 mt-1 font-mono">{model.id}</p>
-                            </div>
-                            {selectedModel === model.id && (
-                              <CheckCircle className="w-5 h-5 text-orange-500" />
-                            )}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {success && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-green-600 text-sm bg-green-50 p-3 rounded-lg"
-                  >
-                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                    <span>Configuración guardada. Redirigiendo...</span>
-                  </motion.div>
-                )}
-
-                <div className="flex gap-3 pt-2">
+              <div className="space-y-2">
+                <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">
+                  API Key
+                </label>
+                <div className="relative">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    id="apiKey"
+                    value={apiKey}
+                    onChange={(e) => {
+                      setApiKey(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="sk-ant-api03-..."
+                    className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                      error
+                        ? "border-red-300 focus:ring-red-500"
+                        : success
+                        ? "border-green-300 focus:ring-green-500"
+                        : "border-gray-300 focus:ring-orange-500"
+                    }`}
+                    disabled={isValidating || success}
+                  />
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                    disabled={success}
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
                   >
-                    Atrás
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleModelSubmit}
-                    disabled={!selectedModel || isLoadingModels || success}
-                    className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {success ? (
-                      <>
-                        <CheckCircle className="w-5 h-5" />
-                        Guardado
-                      </>
-                    ) : (
-                      "Comenzar"
-                    )}
+                    {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
-            )}
+
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg"
+                >
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+
+              {success && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2 text-green-600 text-sm bg-green-50 p-3 rounded-lg"
+                >
+                  <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>API key guardada correctamente. Redirigiendo...</span>
+                </motion.div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  disabled={isValidating}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isValidating || success || !apiKey.trim()}
+                  className="flex-1 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isValidating ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Validando...
+                    </>
+                  ) : success ? (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Guardado
+                    </>
+                  ) : (
+                    "Guardar y continuar"
+                  )}
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 text-center pt-2">
+                Tu API key nunca se envía a nuestros servidores, solo a Anthropic.
+              </p>
+            </form>
           </motion.div>
         </motion.div>
       )}
