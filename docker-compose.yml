@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  dev-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: concilia-dev-chat
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost:3000
+    volumes:
+      # Persistencia de datos
+      - ./data:/app/data
+      # Workspaces para proyectos
+      - ./workspaces:/app/workspaces
+      # Memory Bank local
+      - ./memory-bank:/app/memory-bank
+      # Git config y SSH keys para operaciones git
+      - ~/.gitconfig:/root/.gitconfig:ro
+      - ~/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/projects"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Servicio de desarrollo (opcional)
+  dev-chat-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: concilia-dev-chat-dev
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXTAUTH_URL=http://localhost:3001
+    volumes:
+      # Código fuente para hot reload
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+      # Persistencia de datos
+      - ./data:/app/data
+      # Workspaces para proyectos
+      - ./workspaces:/app/workspaces
+      # Memory Bank local
+      - ./memory-bank:/app/memory-bank
+      # Git config y SSH keys
+      - ~/.gitconfig:/root/.gitconfig:ro
+      - ~/.ssh:/root/.ssh:ro
+    profiles:
+      - dev
+    restart: unless-stopped
+
+volumes:
+  node_modules:
