@@ -11,9 +11,14 @@ import NotificationToast from "@/app/components/preview/NotificationToast";
 import MemoryBankBadge from "@/app/components/memory-bank/MemoryBankBadge";
 import MemoryBankOnboarding from "@/app/components/onboarding/MemoryBankOnboarding";
 import MemoryBankPanel from "@/app/components/memory-bank/MemoryBankPanel";
+import ProjectSelector from "@/app/components/ProjectSelector";
+import ConversationHistory from "@/app/components/ConversationHistory";
+import MemoryBankViewer from "@/app/components/MemoryBankViewer";
+import GitPanel from "@/app/components/GitPanel";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/app/components/ui/Tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
-import { GripVertical, Key } from "lucide-react";
+import { GripVertical, Key, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, MessageSquare, BookOpen, GitBranch } from "lucide-react";
 import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
 
 // Tipos
@@ -30,6 +35,14 @@ function DevChatContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+
+  // Paneles
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+
+  // Proyecto y conversación seleccionados
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
 
   const {
     leftPanelSize,
@@ -75,6 +88,35 @@ function DevChatContent() {
     }
   }, [memoryBankStatus]);
 
+  // Cargar conversación cuando se selecciona
+  useEffect(() => {
+    if (selectedConversation) {
+      loadConversation(selectedConversation);
+    } else {
+      setMessages([]);
+    }
+  }, [selectedConversation]);
+
+  const loadConversation = async (conversationId: string) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`);
+      const data = await response.json();
+
+      if (data.success && data.conversation?.messages) {
+        setMessages(
+          data.conversation.messages.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            isStreaming: false,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+    }
+  };
+
   /**
    * Enviar mensaje a Claude usando SSE
    */
@@ -115,6 +157,9 @@ function DevChatContent() {
         console.log("📤 Enviando mensaje a /api/dev-chat...");
         console.log("📝 Mensaje:", userMessage);
         console.log("📚 Historial:", conversationHistory.length, "mensajes");
+        if (selectedProject) {
+          console.log("📂 Proyecto:", selectedProject);
+        }
 
         const apiKey = getStoredApiKey();
         const model = getStoredModel();
@@ -128,6 +173,7 @@ function DevChatContent() {
             message: userMessage,
             conversationHistory: conversationHistory,
             model: model,
+            projectId: selectedProject,
           }),
         });
 
@@ -351,7 +397,7 @@ function DevChatContent() {
         console.log("🏁 Solicitud finalizada (isLoading = false)");
       }
     },
-    [messages, addFileChange]
+    [messages, addFileChange, selectedProject, runningCommands, addCommand, updateCommand]
   );
 
   // Manejadores de drag para redimensionar paneles
@@ -392,31 +438,54 @@ function DevChatContent() {
 
   return (
     <div ref={containerRef} className="flex h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
-      {/* Panel Izquierdo - Chat */}
-      <div
-        className="flex flex-col"
-        style={{
-          width: previewCollapsed ? "100%" : `${leftPanelSize}%`,
-          transition: isDragging ? "none" : "width 0.2s ease",
-        }}
-      >
+      {/* Panel Izquierdo - Proyectos */}
+      {leftPanelOpen && (
+        <div className="w-64 border-r bg-white flex-shrink-0 flex flex-col">
+          <ProjectSelector
+            onSelect={(id) => {
+              setSelectedProject(id);
+              setSelectedConversation(null);
+              setMessages([]);
+            }}
+            selected={selectedProject}
+          />
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="border-b border-claude-border bg-white/80 backdrop-blur-sm"
         >
-          <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="px-4 py-3">
             <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-semibold text-gray-900">
-                  Chat de Desarrollo con Claude
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  Desarrollo colaborativo potenciado por IA
-                </p>
-              </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setLeftPanelOpen(!leftPanelOpen)}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={leftPanelOpen ? "Ocultar proyectos" : "Mostrar proyectos"}
+                >
+                  {leftPanelOpen ? (
+                    <PanelLeftClose className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <PanelLeft className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
+                <div>
+                  <h1 className="text-lg font-semibold text-gray-900">
+                    {selectedProject ? "Chat de Desarrollo" : "AI Dev Companion"}
+                  </h1>
+                  {selectedProject && (
+                    <p className="text-xs text-gray-500">
+                      Proyecto seleccionado
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
                     clearStoredApiKey();
@@ -432,6 +501,17 @@ function DevChatContent() {
                   onOpenPanel={() => setShowMemoryBankPanel(true)}
                   onOpenOnboarding={() => setShowOnboarding(true)}
                 />
+                <button
+                  onClick={() => setRightPanelOpen(!rightPanelOpen)}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={rightPanelOpen ? "Ocultar panel" : "Mostrar panel"}
+                >
+                  {rightPanelOpen ? (
+                    <PanelRightClose className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <PanelRight className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -439,12 +519,12 @@ function DevChatContent() {
 
         {/* Warning si no hay API key */}
         {apiKeyMissing && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
-            <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
+            <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-amber-800">
-                <Key className="w-5 h-5" />
-                <span className="text-sm font-medium">
-                  No hay API key configurada. El chat no funcionará correctamente.
+                <Key className="w-4 h-4" />
+                <span className="text-sm">
+                  No hay API key configurada.
                 </span>
               </div>
               <button
@@ -458,80 +538,157 @@ function DevChatContent() {
         )}
 
         {/* Chat Container */}
-        <ChatContainer>
-          {messages.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-              className="flex flex-col items-center justify-center h-full text-center py-12"
-            >
-              <div className="w-16 h-16 rounded-full bg-claude-orange/10 flex items-center justify-center mb-4">
-                <svg
-                  className="w-8 h-8 text-claude-orange"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+        <div className="flex-1 flex overflow-hidden">
+          <div
+            className="flex-1 flex flex-col"
+            style={{
+              width: previewCollapsed ? "100%" : `${leftPanelSize}%`,
+              transition: isDragging ? "none" : "width 0.2s ease",
+            }}
+          >
+            <ChatContainer>
+              {!selectedProject ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex flex-col items-center justify-center h-full text-center py-12"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                ¡Hola! Soy Claude
-              </h2>
-              <p className="text-gray-600 max-w-md">
-                Estoy aquí para ayudarte con tu desarrollo. Puedo leer, escribir y
-                modificar archivos del proyecto. Pregúntame lo que necesites.
-              </p>
-            </motion.div>
-          ) : (
-            <>
-              {messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  content={message.content}
-                  role={message.role}
-                  isStreaming={message.isStreaming}
-                />
-              ))}
-              {isLoading && !streamingMessageId && <TypingIndicator />}
-            </>
-          )}
-        </ChatContainer>
+                  <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                    <svg
+                      className="w-8 h-8 text-orange-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    Selecciona un proyecto
+                  </h2>
+                  <p className="text-gray-600 max-w-md">
+                    Elige un proyecto del panel izquierdo o crea uno nuevo para comenzar a trabajar con Claude.
+                  </p>
+                </motion.div>
+              ) : messages.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex flex-col items-center justify-center h-full text-center py-12"
+                >
+                  <div className="w-16 h-16 rounded-full bg-claude-orange/10 flex items-center justify-center mb-4">
+                    <svg
+                      className="w-8 h-8 text-claude-orange"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                      />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                    ¡Hola! Soy Claude
+                  </h2>
+                  <p className="text-gray-600 max-w-md">
+                    Estoy aquí para ayudarte con tu desarrollo. Puedo leer, escribir y
+                    modificar archivos del proyecto. Pregúntame lo que necesites.
+                  </p>
+                </motion.div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      content={message.content}
+                      role={message.role}
+                      isStreaming={message.isStreaming}
+                    />
+                  ))}
+                  {isLoading && !streamingMessageId && <TypingIndicator />}
+                </>
+              )}
+            </ChatContainer>
 
-        {/* Input */}
-        <ChatInput onSendMessage={handleSendMessage} disabled={isLoading} />
+            {/* Input */}
+            <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !selectedProject} />
+          </div>
+
+          {/* Divisor Draggable */}
+          {!previewCollapsed && (
+            <div
+              className={`w-1 bg-claude-border hover:bg-claude-orange hover:w-1.5 transition-all cursor-col-resize flex items-center justify-center ${
+                isDragging ? "bg-claude-orange w-1.5" : ""
+              }`}
+              onMouseDown={handleMouseDown}
+            >
+              <div className="p-1 bg-white rounded shadow-sm">
+                <GripVertical className="w-3 h-3 text-gray-400" />
+              </div>
+            </div>
+          )}
+
+          {/* Panel Preview */}
+          {!previewCollapsed && (
+            <div
+              className="flex flex-col"
+              style={{
+                width: `${100 - leftPanelSize}%`,
+                transition: isDragging ? "none" : "width 0.2s ease",
+              }}
+            >
+              <PreviewPanel />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Divisor Draggable */}
-      {!previewCollapsed && (
-        <div
-          className={`w-1 bg-claude-border hover:bg-claude-orange hover:w-1.5 transition-all cursor-col-resize flex items-center justify-center ${
-            isDragging ? "bg-claude-orange w-1.5" : ""
-          }`}
-          onMouseDown={handleMouseDown}
-        >
-          <div className="p-1 bg-white rounded shadow-sm">
-            <GripVertical className="w-3 h-3 text-gray-400" />
-          </div>
-        </div>
-      )}
+      {/* Panel Derecho - Tabs */}
+      {rightPanelOpen && selectedProject && (
+        <div className="w-80 border-l bg-white flex-shrink-0 flex flex-col">
+          <Tabs defaultValue="conversations" className="flex-1 flex flex-col">
+            <TabsList>
+              <TabsTrigger value="conversations">
+                <MessageSquare className="w-4 h-4 mr-1.5" />
+                <span className="hidden lg:inline">Chats</span>
+              </TabsTrigger>
+              <TabsTrigger value="memory-bank">
+                <BookOpen className="w-4 h-4 mr-1.5" />
+                <span className="hidden lg:inline">MB</span>
+              </TabsTrigger>
+              <TabsTrigger value="git">
+                <GitBranch className="w-4 h-4 mr-1.5" />
+                <span className="hidden lg:inline">Git</span>
+              </TabsTrigger>
+            </TabsList>
 
-      {/* Panel Derecho - Preview */}
-      {!previewCollapsed && (
-        <div
-          className="flex flex-col"
-          style={{
-            width: `${100 - leftPanelSize}%`,
-            transition: isDragging ? "none" : "width 0.2s ease",
-          }}
-        >
-          <PreviewPanel />
+            <TabsContent value="conversations" className="flex-1 overflow-hidden">
+              <ConversationHistory
+                projectId={selectedProject}
+                onSelect={setSelectedConversation}
+                selected={selectedConversation}
+              />
+            </TabsContent>
+
+            <TabsContent value="memory-bank" className="flex-1 overflow-hidden">
+              <MemoryBankViewer projectId={selectedProject} />
+            </TabsContent>
+
+            <TabsContent value="git" className="flex-1 overflow-y-auto p-4">
+              <GitPanel projectId={selectedProject} />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
