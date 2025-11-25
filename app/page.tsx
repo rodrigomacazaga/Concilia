@@ -1,10 +1,30 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Brain, Code, MessageSquare, FileText, Zap, CheckCircle } from "lucide-react";
+import ApiKeyModal, { hasStoredApiKey } from "@/app/components/ApiKeyModal";
 
 export default function HomePage() {
+  const router = useRouter();
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+
+  const handleOpenDevEnvironment = () => {
+    // Si ya tiene una API key guardada, navegar directamente
+    if (hasStoredApiKey()) {
+      router.push("/dev");
+    } else {
+      // Si no, mostrar el modal
+      setShowApiKeyModal(true);
+    }
+  };
+
+  const handleApiKeySuccess = () => {
+    setShowApiKeyModal(false);
+    router.push("/dev");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
       {/* Header */}
@@ -19,12 +39,12 @@ export default function HomePage() {
               <p className="text-xs text-gray-500">Powered by Claude</p>
             </div>
           </div>
-          <Link
-            href="/dev"
+          <button
+            onClick={handleOpenDevEnvironment}
             className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium"
           >
             Open Dev Environment
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -44,13 +64,13 @@ export default function HomePage() {
             A conversational development environment that understands your project,
             remembers your decisions, and helps you code faster with Claude AI.
           </p>
-          <Link
-            href="/dev"
+          <button
+            onClick={handleOpenDevEnvironment}
             className="inline-flex items-center gap-2 px-8 py-4 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl"
           >
             <Zap className="w-5 h-5" />
             Start Coding with AI
-          </Link>
+          </button>
         </motion.div>
       </section>
 
@@ -253,13 +273,13 @@ export default function HomePage() {
           <p className="text-xl mb-8 opacity-90">
             Experience the future of development with AI assistance
           </p>
-          <Link
-            href="/dev"
+          <button
+            onClick={handleOpenDevEnvironment}
             className="inline-flex items-center gap-2 px-8 py-4 bg-white text-orange-600 rounded-xl hover:bg-gray-50 transition-colors font-semibold text-lg shadow-lg"
           >
             <Zap className="w-5 h-5" />
             Open Dev Environment
-          </Link>
+          </button>
         </motion.div>
       </section>
 
@@ -274,6 +294,13 @@ export default function HomePage() {
           </p>
         </div>
       </footer>
+
+      {/* Modal para API Key */}
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSuccess={handleApiKeySuccess}
+      />
     </div>
   );
 }

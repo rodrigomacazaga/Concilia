@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import MessageBubble from "@/app/components/chat/MessageBubble";
 import ChatInput from "@/app/components/chat/ChatInput";
 import ChatContainer from "@/app/components/chat/ChatContainer";
@@ -12,7 +13,8 @@ import MemoryBankOnboarding from "@/app/components/onboarding/MemoryBankOnboardi
 import MemoryBankPanel from "@/app/components/memory-bank/MemoryBankPanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Key } from "lucide-react";
+import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey } from "@/app/components/ApiKeyModal";
 
 // Tipos
 interface Message {
@@ -23,9 +25,11 @@ interface Message {
 }
 
 function DevChatContent() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
   const {
     leftPanelSize,
@@ -37,6 +41,13 @@ function DevChatContent() {
     memoryBankStatus,
     refreshMemoryBankStatus,
   } = useDevContext();
+
+  // Verificar API key al montar
+  useEffect(() => {
+    if (!hasStoredApiKey()) {
+      setApiKeyMissing(true);
+    }
+  }, []);
 
   // State para tracking de comandos en progreso
   const [runningCommands, setRunningCommands] = useState<Record<string, string>>({});
@@ -105,10 +116,12 @@ function DevChatContent() {
         console.log("📝 Mensaje:", userMessage);
         console.log("📚 Historial:", conversationHistory.length, "mensajes");
 
+        const apiKey = getStoredApiKey();
         const response = await fetch("/api/dev-chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(apiKey && { "x-api-key": apiKey }),
           },
           body: JSON.stringify({
             message: userMessage,
@@ -401,13 +414,46 @@ function DevChatContent() {
                   Desarrollo colaborativo potenciado por IA
                 </p>
               </div>
-              <MemoryBankBadge
-                onOpenPanel={() => setShowMemoryBankPanel(true)}
-                onOpenOnboarding={() => setShowOnboarding(true)}
-              />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    clearStoredApiKey();
+                    router.push("/");
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Cambiar API Key"
+                >
+                  <Key className="w-4 h-4" />
+                  <span className="hidden sm:inline">API Key</span>
+                </button>
+                <MemoryBankBadge
+                  onOpenPanel={() => setShowMemoryBankPanel(true)}
+                  onOpenOnboarding={() => setShowOnboarding(true)}
+                />
+              </div>
             </div>
           </div>
         </motion.header>
+
+        {/* Warning si no hay API key */}
+        {apiKeyMissing && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+            <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-amber-800">
+                <Key className="w-5 h-5" />
+                <span className="text-sm font-medium">
+                  No hay API key configurada. El chat no funcionará correctamente.
+                </span>
+              </div>
+              <button
+                onClick={() => router.push("/")}
+                className="px-3 py-1 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                Configurar
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Chat Container */}
         <ChatContainer>
