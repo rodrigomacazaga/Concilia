@@ -15,8 +15,84 @@ import {
   Save,
   X,
   Edit3,
+  Loader2,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// Modal component
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}
+
+function Modal({ isOpen, onClose, title, children }: ModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-gray-100 rounded text-gray-500"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Toast notification component
+interface ToastProps {
+  message: string;
+  type: "success" | "error" | "loading";
+  isVisible: boolean;
+}
+
+function Toast({ message, type, isVisible }: ToastProps) {
+  if (!isVisible) return null;
+
+  const icons = {
+    success: <CheckCircle className="w-4 h-4 text-green-500" />,
+    error: <XCircle className="w-4 h-4 text-red-500" />,
+    loading: <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />,
+  };
+
+  const bgColors = {
+    success: "bg-green-50 border-green-200",
+    error: "bg-red-50 border-red-200",
+    loading: "bg-blue-50 border-blue-200",
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2 rounded-lg border shadow-lg ${bgColors[type]}`}
+    >
+      {icons[type]}
+      <span className="text-sm">{message}</span>
+    </motion.div>
+  );
+}
 
 interface ServiceSummary {
   name: string;
@@ -77,6 +153,32 @@ export function MemoryBankPanel({
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+
+  // Modal states
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [newServiceName, setNewServiceName] = useState("");
+  const [newServiceDescription, setNewServiceDescription] = useState("");
+  const [newServiceTechnology, setNewServiceTechnology] = useState("node");
+  const [newServicePort, setNewServicePort] = useState("");
+
+  // Toast state
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "loading";
+    isVisible: boolean;
+  }>({ message: "", type: "success", isVisible: false });
+
+  const showToast = (message: string, type: "success" | "error" | "loading") => {
+    setToast({ message, type, isVisible: true });
+    if (type !== "loading") {
+      setTimeout(() => setToast((prev) => ({ ...prev, isVisible: false })), 3000);
+    }
+  };
+
+  const hideToast = () => {
+    setToast((prev) => ({ ...prev, isVisible: false }));
+  };
 
   const loadMemoryBanks = useCallback(async () => {
     if (!projectId) return;
@@ -152,6 +254,9 @@ export function MemoryBankPanel({
   };
 
   const handleInitGeneral = async () => {
+    setInitializing(true);
+    showToast("Inicializando Memory Bank general...", "loading");
+
     try {
       const res = await fetch("/api/memory-bank/init-hierarchical", {
         method: "POST",
@@ -159,33 +264,69 @@ export function MemoryBankPanel({
         body: JSON.stringify({ projectId }),
       });
 
-      if (res.ok) {
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        hideToast();
+        showToast("Memory Bank general creado exitosamente", "success");
         await loadMemoryBanks();
+      } else {
+        hideToast();
+        showToast(data.error || "Error al crear Memory Bank", "error");
       }
     } catch (error) {
+      hideToast();
+      showToast("Error de conexión al crear Memory Bank", "error");
       console.error("Error initializing general MB:", error);
+    } finally {
+      setInitializing(false);
     }
   };
 
-  const handleInitService = async (serviceName: string) => {
+  const handleInitService = async () => {
+    if (!newServiceName.trim()) {
+      showToast("El nombre del servicio es requerido", "error");
+      return;
+    }
+
     const config = {
-      description: `Servicio ${serviceName}`,
-      technology: "node",
-      port: 5000 + Math.floor(Math.random() * 1000),
+      description: newServiceDescription || `Servicio ${newServiceName}`,
+      technology: newServiceTechnology,
+      port: newServicePort ? parseInt(newServicePort) : 5000 + Math.floor(Math.random() * 1000),
     };
+
+    setInitializing(true);
+    showToast(`Creando servicio ${newServiceName}...`, "loading");
+    setShowServiceModal(false);
 
     try {
       const res = await fetch("/api/memory-bank/init-hierarchical", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, service: serviceName, config }),
+        body: JSON.stringify({ projectId, service: newServiceName.trim(), config }),
       });
 
-      if (res.ok) {
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        hideToast();
+        showToast(`Servicio "${newServiceName}" creado exitosamente`, "success");
+        // Reset form
+        setNewServiceName("");
+        setNewServiceDescription("");
+        setNewServiceTechnology("node");
+        setNewServicePort("");
         await loadMemoryBanks();
+      } else {
+        hideToast();
+        showToast(data.error || "Error al crear servicio", "error");
       }
     } catch (error) {
+      hideToast();
+      showToast("Error de conexión al crear servicio", "error");
       console.error("Error initializing service MB:", error);
+    } finally {
+      setInitializing(false);
     }
   };
 
@@ -314,10 +455,15 @@ export function MemoryBankPanel({
                   <div className="px-3 pb-3">
                     <button
                       onClick={handleInitGeneral}
-                      className="w-full p-2 text-xs text-center text-orange-600 border border-orange-200 rounded hover:bg-orange-50"
+                      disabled={initializing}
+                      className="w-full p-2 text-xs text-center text-orange-600 border border-orange-200 rounded hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      <Plus className="w-3 h-3 inline mr-1" />
-                      Inicializar Memory Bank General
+                      {initializing ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Plus className="w-3 h-3" />
+                      )}
+                      {initializing ? "Inicializando..." : "Inicializar Memory Bank General"}
                     </button>
                   </div>
                 ) : (
@@ -442,11 +588,9 @@ export function MemoryBankPanel({
 
                   {/* Botón agregar servicio */}
                   <button
-                    onClick={() => {
-                      const name = prompt("Nombre del servicio:");
-                      if (name) handleInitService(name);
-                    }}
-                    className="w-full p-1.5 text-left text-xs text-gray-500 hover:bg-gray-100 rounded flex items-center gap-2"
+                    onClick={() => setShowServiceModal(true)}
+                    disabled={initializing}
+                    className="w-full p-1.5 text-left text-xs text-gray-500 hover:bg-gray-100 rounded flex items-center gap-2 disabled:opacity-50"
                   >
                     <Plus className="w-3 h-3" />
                     Agregar servicio
@@ -520,6 +664,101 @@ export function MemoryBankPanel({
           )}
         </div>
       )}
+
+      {/* Modal para crear servicio */}
+      <Modal
+        isOpen={showServiceModal}
+        onClose={() => setShowServiceModal(false)}
+        title="Crear nuevo servicio"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre del servicio *
+            </label>
+            <input
+              type="text"
+              value={newServiceName}
+              onChange={(e) => setNewServiceName(e.target.value)}
+              placeholder="ej: auth-service"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Descripción
+            </label>
+            <input
+              type="text"
+              value={newServiceDescription}
+              onChange={(e) => setNewServiceDescription(e.target.value)}
+              placeholder="ej: Servicio de autenticación"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tecnología
+              </label>
+              <select
+                value={newServiceTechnology}
+                onChange={(e) => setNewServiceTechnology(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              >
+                <option value="node">Node.js</option>
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="go">Go</option>
+                <option value="rust">Rust</option>
+                <option value="dotnet">.NET</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Puerto
+              </label>
+              <input
+                type="number"
+                value={newServicePort}
+                onChange={(e) => setNewServicePort(e.target.value)}
+                placeholder="5000"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setShowServiceModal(false)}
+              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleInitService}
+              disabled={!newServiceName.trim() || initializing}
+              className="px-4 py-2 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {initializing && <Loader2 className="w-4 h-4 animate-spin" />}
+              Crear servicio
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Toast notification */}
+      <AnimatePresence>
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          isVisible={toast.isVisible}
+        />
+      </AnimatePresence>
     </div>
   );
 }
