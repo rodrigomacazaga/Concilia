@@ -12,8 +12,22 @@ import ProjectSelector from "@/app/components/ProjectSelector";
 import { motion } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
 import { GripVertical, Key, PanelLeftClose, PanelLeft } from "lucide-react";
-import { hasAnyApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
+import { hasAnyApiKey } from "@/app/components/ApiKeyModal";
 import { getStoredApiKey, getProviderFromModel } from "@/lib/ai-providers";
+import { ModeSelector, Mode, loadPreferences } from "@/app/components/ModeSelector";
+import { ModeIndicator } from "@/app/components/ModeIndicator";
+
+// Lista de modelos disponibles
+const AVAILABLE_MODELS = [
+  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', provider: 'Anthropic' },
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'Anthropic' },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'Anthropic' },
+  { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'Anthropic' },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', provider: 'Google' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'Google' },
+];
 
 // Tipos
 interface Message {
@@ -37,6 +51,13 @@ function DevChatContent() {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [currentService, setCurrentService] = useState<string | null>(null);
+
+  // Sistema de modos
+  const [currentMode, setCurrentMode] = useState<Mode>('chat');
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const prefs = loadPreferences();
+    return prefs.chat;
+  });
 
   const {
     addFileChange,
@@ -126,8 +147,7 @@ function DevChatContent() {
       setStreamingMessageId(assistantMessageId);
 
       try {
-        const model = getStoredModel();
-        const provider = getProviderFromModel(model);
+        const provider = getProviderFromModel(selectedModel);
         const apiKey = getStoredApiKey(provider);
 
         // Construir headers según el proveedor
@@ -155,9 +175,10 @@ function DevChatContent() {
           body: JSON.stringify({
             message: userMessage,
             conversationHistory: conversationHistory,
-            model: model,
+            model: selectedModel,
             projectId: selectedProject,
             currentService: currentService,
+            mode: currentMode,
           }),
         });
 
@@ -324,7 +345,7 @@ function DevChatContent() {
         setIsLoading(false);
       }
     },
-    [messages, addFileChange, selectedProject, currentService, runningCommands, addCommand, updateCommand]
+    [messages, addFileChange, selectedProject, currentService, runningCommands, addCommand, updateCommand, selectedModel, currentMode]
   );
 
   // Manejadores de resize para chat/preview
@@ -362,6 +383,31 @@ function DevChatContent() {
       document.body.style.userSelect = "";
     };
   }, [isResizingChat, setLeftPanelSize]);
+
+  // Keyboard shortcuts para cambiar modo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey) {
+        switch (e.key) {
+          case '1':
+            e.preventDefault();
+            setCurrentMode('chat');
+            break;
+          case '2':
+            e.preventDefault();
+            setCurrentMode('execute');
+            break;
+          case '3':
+            e.preventDefault();
+            setCurrentMode('deepThink');
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="flex h-screen bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-orange-50/30">
@@ -413,14 +459,28 @@ function DevChatContent() {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => router.push("/")}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Configurar API Keys"
-              >
-                <Key className="w-4 h-4" />
-                <span className="hidden sm:inline">API Keys</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Mode Selector - solo visible cuando hay proyecto */}
+                {selectedProject && (
+                  <ModeSelector
+                    currentMode={currentMode}
+                    onModeChange={setCurrentMode}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    disabled={isLoading}
+                    availableModels={AVAILABLE_MODELS}
+                  />
+                )}
+
+                <button
+                  onClick={() => router.push("/")}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Configurar API Keys"
+                >
+                  <Key className="w-4 h-4" />
+                  <span className="hidden sm:inline">API Keys</span>
+                </button>
+              </div>
             </div>
           </div>
         </motion.header>
@@ -525,8 +585,19 @@ function DevChatContent() {
               )}
             </ChatContainer>
 
-            {/* Input */}
-            <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !selectedProject} />
+            {/* Mode Indicator + Input */}
+            <div className="border-t">
+              {selectedProject && (
+                <div className="px-4 pt-2">
+                  <ModeIndicator
+                    mode={currentMode}
+                    model={selectedModel}
+                    serviceName={currentService}
+                  />
+                </div>
+              )}
+              <ChatInput onSendMessage={handleSendMessage} disabled={isLoading || !selectedProject} />
+            </div>
           </div>
 
           {/* Resize handle for Chat/Preview */}

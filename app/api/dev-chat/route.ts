@@ -10,6 +10,7 @@ import {
   getProviderFromModel,
   PROVIDERS,
 } from "@/lib/ai-providers";
+import { Mode, MODE_CONFIGS, loadModeContext } from "@/lib/modes";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -23,6 +24,7 @@ interface ChatRequest {
   model?: string;
   projectId?: string;
   currentService?: string;
+  mode?: Mode;  // 'chat' | 'execute' | 'deepThink'
 }
 
 // Tipos para los eventos SSE
@@ -774,11 +776,12 @@ export async function POST(req: NextRequest) {
       model = DEFAULT_MODEL,
       projectId,
       currentService,
+      mode = "chat",  // Default to chat mode
     } = body;
 
     // Detectar proveedor basado en el modelo
     const provider = getProviderFromModel(model);
-    console.log(`[dev-chat] Proveedor: ${provider}, Modelo: ${model}`);
+    console.log(`[dev-chat] Proveedor: ${provider}, Modelo: ${model}, Modo: ${mode}`);
 
     // Obtener API key del header correspondiente
     let apiKey: string | null = null;
@@ -829,11 +832,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cargar system prompt
-    const systemPrompt = await loadMemoryBankSystemPrompt(
-      projectId,
-      currentService
-    );
+    // Cargar system prompt basado en el modo
+    let systemPrompt: string;
+
+    if (projectId) {
+      // Intentar usar el nuevo sistema de modos
+      try {
+        const project = await getProject(projectId);
+        if (project?.path) {
+          const modeContext = await loadModeContext(
+            mode,
+            project.path,
+            project.name,
+            currentService || null,
+            model
+          );
+          systemPrompt = modeContext.systemPrompt;
+          console.log(`[dev-chat] Modo ${mode} cargado, tokens estimados: ${modeContext.estimatedTokens}`);
+        } else {
+          // Fallback al sistema anterior
+          systemPrompt = await loadMemoryBankSystemPrompt(projectId, currentService);
+        }
+      } catch (error) {
+        console.error("[dev-chat] Error cargando modo, usando fallback:", error);
+        systemPrompt = await loadMemoryBankSystemPrompt(projectId, currentService);
+      }
+    } else {
+      // Sin proyecto, usar prompt basico
+      systemPrompt = await loadMemoryBankSystemPrompt(projectId, currentService);
+    }
+
     console.log("[dev-chat] System prompt cargado, longitud:", systemPrompt.length);
 
     // Construir mensajes

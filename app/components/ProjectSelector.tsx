@@ -13,8 +13,10 @@ import {
   ChevronDown,
   Edit3,
   AlertCircle,
+  FolderSearch,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { FolderPicker } from "./FolderPicker";
 
 interface Project {
   id: string;
@@ -57,6 +59,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
   const [selectedMBFile, setSelectedMBFile] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -366,13 +369,21 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
             className="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             required
           />
-          <input
-            type="text"
-            placeholder="Ruta local (opcional)"
-            value={newProject.path}
-            onChange={(e) => setNewProject({ ...newProject, path: e.target.value })}
-            className="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
+
+          {/* Folder picker button */}
+          <button
+            type="button"
+            onClick={() => setShowFolderPicker(true)}
+            className="w-full px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500 flex items-center gap-2 text-left"
+          >
+            <FolderSearch className="w-4 h-4 text-orange-500 flex-shrink-0" />
+            {newProject.path ? (
+              <span className="truncate text-gray-700">{newProject.path}</span>
+            ) : (
+              <span className="text-gray-400">Seleccionar carpeta local...</span>
+            )}
+          </button>
+
           <input
             type="text"
             placeholder="Git URL (opcional)"
@@ -398,6 +409,14 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
           </div>
         </form>
       )}
+
+      {/* Folder Picker Modal */}
+      <FolderPicker
+        isOpen={showFolderPicker}
+        onClose={() => setShowFolderPicker(false)}
+        onSelect={(path) => setNewProject({ ...newProject, path })}
+        initialPath={newProject.path}
+      />
 
       {/* Project list (only show when no project is selected) */}
       {!selected && (
