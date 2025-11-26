@@ -1,8 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { AVAILABLE_TOOLS } from "@/lib/file-operations-types";
 import { getProject } from "@/lib/projects";
 import { buildMemoryBankContext } from "@/lib/hierarchical-memory-bank";
+import {
+  AIProvider,
+  getProviderFromModel,
+  PROVIDERS,
+} from "@/lib/ai-providers";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -15,7 +22,7 @@ interface ChatRequest {
   conversationHistory?: ChatMessage[];
   model?: string;
   projectId?: string;
-  currentService?: string; // Servicio actual para cargar contexto local
+  currentService?: string;
 }
 
 // Tipos para los eventos SSE
@@ -53,21 +60,31 @@ type SSEEvent =
   | SSECompleteEvent
   | SSEErrorEvent;
 
-// Modelo de Claude por defecto
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
+// Modelo por defecto
+const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
 /**
  * Carga el Memory Bank de un proyecto específico o el global
  */
-async function loadProjectMemoryBank(projectId?: string): Promise<{ exists: boolean; meta: string | null; files: Record<string, string>; consolidated: string; projectName?: string } | null> {
+async function loadProjectMemoryBank(
+  projectId?: string
+): Promise<{
+  exists: boolean;
+  meta: string | null;
+  files: Record<string, string>;
+  consolidated: string;
+  projectName?: string;
+} | null> {
   try {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
     if (projectId) {
-      // Cargar Memory Bank del proyecto específico
-      const response = await fetch(`${baseUrl}/api/projects/${projectId}/memory-bank`, {
-        method: "GET",
-      });
+      const response = await fetch(
+        `${baseUrl}/api/projects/${projectId}/memory-bank`,
+        {
+          method: "GET",
+        }
+      );
 
       if (!response.ok) return null;
 
@@ -75,7 +92,6 @@ async function loadProjectMemoryBank(projectId?: string): Promise<{ exists: bool
       return data.success ? data : null;
     }
 
-    // Fallback al Memory Bank global
     const response = await fetch(`${baseUrl}/api/memory-bank`, {
       method: "GET",
     });
@@ -98,10 +114,11 @@ async function loadProjectMemoryBank(projectId?: string): Promise<{ exists: bool
 
 /**
  * Carga el Memory Bank y construye el system prompt
- * Ahora soporta Memory Bank jerárquico (general + local por servicio)
  */
-async function loadMemoryBankSystemPrompt(projectId?: string, currentService?: string): Promise<string> {
-  // Intentar cargar Memory Bank jerárquico primero si hay projectId
+async function loadMemoryBankSystemPrompt(
+  projectId?: string,
+  currentService?: string
+): Promise<string> {
   if (projectId) {
     try {
       const project = await getProject(projectId);
@@ -112,8 +129,11 @@ async function loadMemoryBankSystemPrompt(projectId?: string, currentService?: s
           currentService
         );
 
-        if (hierarchicalContext && hierarchicalContext.includes("=== MEMORY BANK")) {
-          return `Eres un asistente de desarrollo experto trabajando en este proyecto.
+        if (
+          hierarchicalContext &&
+          hierarchicalContext.includes("=== MEMORY BANK")
+        ) {
+          return `Eres Juliet, un asistente de desarrollo experto trabajando en este proyecto.
 
 Proyecto: ${project.name}
 ${currentService ? `Servicio actual: ${currentService}` : ""}
@@ -144,12 +164,10 @@ Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y g
     }
   }
 
-  // Fallback al Memory Bank tradicional
   const memoryBank = await loadProjectMemoryBank(projectId);
 
   if (!memoryBank || !memoryBank.exists) {
-    // Memory Bank no inicializado, retornar system prompt básico
-    return `Eres un asistente de desarrollo experto. Tienes acceso a herramientas para:
+    return `Eres Juliet, un asistente de desarrollo experto. Tienes acceso a herramientas para:
 - Leer y escribir archivos del proyecto
 - Ejecutar comandos (npm, git, etc.)
 - Gestionar un Memory Bank para contexto persistente
@@ -157,10 +175,8 @@ Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y g
 El Memory Bank NO está inicializado. Si el usuario menciona el proyecto, sugiere inicializar el Memory Bank para mantener contexto entre sesiones.`;
   }
 
-  // Construir contexto del Memory Bank
   let memoryBankContext = "";
 
-  // Si hay META, ponerlo primero con instrucciones especiales
   if (memoryBank.meta) {
     memoryBankContext += `## META-MEMORY-BANK.md (REGLAS CRÍTICAS)
 
@@ -171,7 +187,6 @@ ${memoryBank.meta}
 `;
   }
 
-  // Agregar el resto de archivos
   if (memoryBank.files && Object.keys(memoryBank.files).length > 0) {
     for (const [fileName, content] of Object.entries(memoryBank.files)) {
       if (fileName !== "META-MEMORY-BANK.md") {
@@ -188,9 +203,11 @@ ${content}
     memoryBankContext = memoryBank.consolidated;
   }
 
-  const projectInfo = memoryBank.projectName ? `\nProyecto: ${memoryBank.projectName}\n` : "";
+  const projectInfo = memoryBank.projectName
+    ? `\nProyecto: ${memoryBank.projectName}\n`
+    : "";
 
-  return `Eres un asistente de desarrollo experto trabajando en este proyecto.
+  return `Eres Juliet, un asistente de desarrollo experto trabajando en este proyecto.
 ${projectInfo}
 # MEMORY BANK - CONTEXTO DEL PROYECTO
 
@@ -234,7 +251,7 @@ ${memoryBankContext}
 
 6. **Modo planificación**: Si el usuario dice "plan:", NO ejecutes nada, solo propón pasos. Espera "actúa" para ejecutar.
 
-7. **Mantén coherencia**: Usa el contexto del Memory Bank para dar respuestas coherentes con decisiones previas y el estado actual del proyecto. SIEMPRE asegúrate de que el código coincida con las especificaciones del Memory Bank.
+7. **Mantén coherencia**: Usa el contexto del Memory Bank para dar respuestas coherentes con decisiones previas y el estado actual del proyecto.
 
 Tienes acceso a herramientas para leer/escribir archivos, ejecutar comandos, y gestionar el Memory Bank. ¡Úsalas proactivamente!`;
 }
@@ -269,7 +286,6 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
         endpoint = "/api/commands";
         body = { command: toolInput.command };
 
-        // Caso especial: comandos retornan streaming
         const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
         const cmdResponse = await fetch(`${baseUrl}${endpoint}`, {
           method: "POST",
@@ -277,13 +293,11 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
           body: JSON.stringify(body),
         });
 
-        // Si hay error en la validación
         if (!cmdResponse.ok) {
           const errorData = await cmdResponse.json();
           return JSON.stringify(errorData);
         }
 
-        // Consumir el stream completo
         const reader = cmdResponse.body?.getReader();
         const decoder = new TextDecoder();
         let stdout = "";
@@ -330,20 +344,23 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
 
       case "read_memory_bank":
         endpoint = "/api/memory-bank";
-        // GET request
-        const baseUrlRead = process.env.NEXTAUTH_URL || "http://localhost:3000";
+        const baseUrlRead =
+          process.env.NEXTAUTH_URL || "http://localhost:3000";
         const readResponse = await fetch(`${baseUrlRead}${endpoint}`, {
           method: "GET",
         });
         const readResult = await readResponse.json();
-        console.log(`[dev-chat] Memory Bank leído:`, readResult.initialized ? "Inicializado" : "No inicializado");
+        console.log(
+          `[dev-chat] Memory Bank leído:`,
+          readResult.initialized ? "Inicializado" : "No inicializado"
+        );
         return JSON.stringify(readResult);
 
       case "update_memory_bank":
         endpoint = "/api/memory-bank";
         body = {
           file: toolInput.file,
-          content: toolInput.content
+          content: toolInput.content,
         };
         break;
 
@@ -353,14 +370,14 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
           file: toolInput.file,
           section: toolInput.section,
           content: toolInput.content,
-          append: true
+          append: true,
         };
         break;
 
       case "get_memory_bank_status":
         endpoint = "/api/memory-bank/status";
-        // GET request
-        const baseUrlStatus = process.env.NEXTAUTH_URL || "http://localhost:3000";
+        const baseUrlStatus =
+          process.env.NEXTAUTH_URL || "http://localhost:3000";
         const statusResponse = await fetch(`${baseUrlStatus}${endpoint}`, {
           method: "GET",
         });
@@ -374,7 +391,6 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
         });
     }
 
-    // Hacer el fetch al endpoint local (para herramientas no-streaming)
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const response = await fetch(`${baseUrl}${endpoint}`, {
       method: "POST",
@@ -397,43 +413,413 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
 }
 
 /**
- * POST endpoint para el chat con Claude usando streaming (SSE) con herramientas
- *
- * @param req - NextRequest con el mensaje y el historial de conversación
- * @returns Response con streaming SSE
+ * Handler para Anthropic (Claude)
+ */
+async function handleAnthropicChat(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  encoder: TextEncoder,
+  controller: ReadableStreamDefaultController
+): Promise<void> {
+  const anthropic = new Anthropic({ apiKey });
+
+  let continueLoop = true;
+  let currentMessages: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  while (continueLoop) {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: currentMessages,
+      tools: AVAILABLE_TOOLS,
+    });
+
+    console.log(
+      "[dev-chat] Anthropic respuesta, stop_reason:",
+      response.stop_reason
+    );
+
+    let fullTextContent = "";
+    const toolUses: any[] = [];
+
+    for (const block of response.content) {
+      if (block.type === "text") {
+        fullTextContent += block.text;
+
+        const sseEvent: SSETokenEvent = {
+          type: "token",
+          content: block.text,
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
+        );
+      } else if (block.type === "tool_use") {
+        toolUses.push(block);
+
+        const toolUseEvent: SSEToolUseEvent = {
+          type: "tool_use",
+          toolName: block.name,
+          toolInput: block.input,
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(toolUseEvent)}\n\n`)
+        );
+      }
+    }
+
+    if (response.stop_reason === "tool_use" && toolUses.length > 0) {
+      console.log(`[dev-chat] Anthropic usó ${toolUses.length} herramientas`);
+
+      currentMessages.push({
+        role: "assistant",
+        content: response.content,
+      });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const toolUse of toolUses) {
+        const result = await executeTool(toolUse.name, toolUse.input);
+
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: result,
+        });
+
+        const toolResultEvent: SSEToolResultEvent = {
+          type: "tool_result",
+          toolName: toolUse.name,
+          result: result,
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(toolResultEvent)}\n\n`)
+        );
+      }
+
+      currentMessages.push({
+        role: "user",
+        content: toolResults,
+      });
+
+      continueLoop = true;
+    } else {
+      continueLoop = false;
+
+      const completeEvent: SSECompleteEvent = {
+        type: "complete",
+        content: fullTextContent,
+      };
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
+      );
+    }
+  }
+}
+
+/**
+ * Handler para OpenAI (GPT)
+ */
+async function handleOpenAIChat(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  encoder: TextEncoder,
+  controller: ReadableStreamDefaultController
+): Promise<void> {
+  const openai = new OpenAI({ apiKey });
+
+  // Convertir herramientas al formato OpenAI
+  const openaiTools: OpenAI.ChatCompletionTool[] = AVAILABLE_TOOLS.map(
+    (tool) => ({
+      type: "function" as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.input_schema as OpenAI.FunctionParameters,
+      },
+    })
+  );
+
+  let continueLoop = true;
+  let currentMessages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+    ...messages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+  ];
+
+  while (continueLoop) {
+    // Algunos modelos o1 no soportan streaming ni tools
+    const supportsStreaming = !model.startsWith("o1");
+    const supportsTools = !model.startsWith("o1");
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages: currentMessages,
+      ...(supportsTools && { tools: openaiTools }),
+      ...(supportsStreaming && { stream: true }),
+    });
+
+    let fullTextContent = "";
+
+    if (supportsStreaming) {
+      // Manejar streaming
+      const toolCalls: Map<
+        number,
+        { id: string; name: string; arguments: string }
+      > = new Map();
+
+      for await (const chunk of response as AsyncIterable<OpenAI.ChatCompletionChunk>) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          fullTextContent += delta.content;
+          const sseEvent: SSETokenEvent = {
+            type: "token",
+            content: delta.content,
+          };
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
+          );
+        }
+
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const existing = toolCalls.get(tc.index);
+            if (existing) {
+              existing.arguments += tc.function?.arguments || "";
+            } else {
+              toolCalls.set(tc.index, {
+                id: tc.id || "",
+                name: tc.function?.name || "",
+                arguments: tc.function?.arguments || "",
+              });
+            }
+          }
+        }
+
+        if (chunk.choices[0]?.finish_reason === "tool_calls") {
+          // Ejecutar las herramientas
+          const toolResults: OpenAI.ChatCompletionMessageParam[] = [];
+
+          currentMessages.push({
+            role: "assistant",
+            content: fullTextContent || null,
+            tool_calls: Array.from(toolCalls.values()).map((tc, index) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.name,
+                arguments: tc.arguments,
+              },
+            })),
+          });
+
+          for (const [, tc] of toolCalls) {
+            const toolUseEvent: SSEToolUseEvent = {
+              type: "tool_use",
+              toolName: tc.name,
+              toolInput: JSON.parse(tc.arguments || "{}"),
+            };
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(toolUseEvent)}\n\n`)
+            );
+
+            const result = await executeTool(
+              tc.name,
+              JSON.parse(tc.arguments || "{}")
+            );
+
+            toolResults.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: result,
+            });
+
+            const toolResultEvent: SSEToolResultEvent = {
+              type: "tool_result",
+              toolName: tc.name,
+              result: result,
+            };
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(toolResultEvent)}\n\n`)
+            );
+          }
+
+          currentMessages.push(...toolResults);
+          continueLoop = true;
+          break;
+        }
+
+        if (chunk.choices[0]?.finish_reason === "stop") {
+          continueLoop = false;
+          const completeEvent: SSECompleteEvent = {
+            type: "complete",
+            content: fullTextContent,
+          };
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
+          );
+        }
+      }
+    } else {
+      // Sin streaming (para modelos o1)
+      const nonStreamResponse =
+        response as OpenAI.Chat.Completions.ChatCompletion;
+      const choice = nonStreamResponse.choices[0];
+
+      if (choice?.message?.content) {
+        fullTextContent = choice.message.content;
+        const sseEvent: SSETokenEvent = {
+          type: "token",
+          content: fullTextContent,
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
+        );
+      }
+
+      continueLoop = false;
+      const completeEvent: SSECompleteEvent = {
+        type: "complete",
+        content: fullTextContent,
+      };
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
+      );
+    }
+  }
+}
+
+/**
+ * Handler para Google (Gemini)
+ */
+async function handleGoogleChat(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  encoder: TextEncoder,
+  controller: ReadableStreamDefaultController
+): Promise<void> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const gemini = genAI.getGenerativeModel({ model });
+
+  // Convertir historial al formato de Gemini
+  const history = messages.slice(0, -1).map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const lastMessage = messages[messages.length - 1];
+
+  const chat = gemini.startChat({
+    history,
+    generationConfig: {
+      maxOutputTokens: 8192,
+    },
+  });
+
+  // Agregar system prompt al primer mensaje si hay historial vacío
+  const prompt =
+    history.length === 0
+      ? `${systemPrompt}\n\n${lastMessage.content}`
+      : lastMessage.content;
+
+  const result = await chat.sendMessageStream(prompt);
+
+  let fullTextContent = "";
+
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullTextContent += text;
+      const sseEvent: SSETokenEvent = {
+        type: "token",
+        content: text,
+      };
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
+      );
+    }
+  }
+
+  const completeEvent: SSECompleteEvent = {
+    type: "complete",
+    content: fullTextContent,
+  };
+  controller.enqueue(
+    encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
+  );
+}
+
+/**
+ * POST endpoint para el chat con múltiples proveedores de IA usando streaming (SSE)
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1. Obtener API key del header (enviada por el cliente) o del entorno
-    const clientApiKey = req.headers.get("x-api-key");
-    const apiKey = clientApiKey || process.env.ANTHROPIC_API_KEY;
+    // Parsear el body del request
+    const body: ChatRequest = await req.json();
+    const {
+      message,
+      conversationHistory = [],
+      model = DEFAULT_MODEL,
+      projectId,
+      currentService,
+    } = body;
+
+    // Detectar proveedor basado en el modelo
+    const provider = getProviderFromModel(model);
+    console.log(`[dev-chat] Proveedor: ${provider}, Modelo: ${model}`);
+
+    // Obtener API key del header correspondiente
+    let apiKey: string | null = null;
+
+    switch (provider) {
+      case "anthropic":
+        apiKey =
+          req.headers.get("x-anthropic-key") ||
+          req.headers.get("x-api-key") ||
+          process.env.ANTHROPIC_API_KEY ||
+          null;
+        break;
+      case "google":
+        apiKey =
+          req.headers.get("x-google-key") ||
+          process.env.GOOGLE_API_KEY ||
+          null;
+        break;
+      case "openai":
+        apiKey =
+          req.headers.get("x-openai-key") ||
+          process.env.OPENAI_API_KEY ||
+          null;
+        break;
+    }
 
     if (!apiKey) {
       return NextResponse.json(
         {
-          error:
-            "API key no proporcionada. Por favor configura tu API key de Anthropic.",
+          error: `API key no proporcionada para ${PROVIDERS[provider].name}. Por favor configura tu API key.`,
         },
         { status: 401 }
       );
     }
 
-    // 2. Parsear el body del request
-    const body: ChatRequest = await req.json();
-    const { message, conversationHistory = [], model, projectId, currentService } = body;
-
-    // Usar el modelo del cliente o el default
-    const claudeModel = model || DEFAULT_CLAUDE_MODEL;
-    console.log("[dev-chat] Usando modelo:", claudeModel);
-    if (projectId) {
-      console.log("[dev-chat] Proyecto seleccionado:", projectId);
-    }
-    if (currentService) {
-      console.log("[dev-chat] Servicio actual:", currentService);
-    }
-
-    // 3. Validar que exista el mensaje
-    if (!message || typeof message !== "string" || message.trim().length === 0) {
+    // Validar mensaje
+    if (
+      !message ||
+      typeof message !== "string" ||
+      message.trim().length === 0
+    ) {
       return NextResponse.json(
         {
           error:
@@ -443,141 +829,60 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Cargar el system prompt con contexto del Memory Bank (del proyecto y servicio si están seleccionados)
-    const systemPrompt = await loadMemoryBankSystemPrompt(projectId, currentService);
+    // Cargar system prompt
+    const systemPrompt = await loadMemoryBankSystemPrompt(
+      projectId,
+      currentService
+    );
     console.log("[dev-chat] System prompt cargado, longitud:", systemPrompt.length);
 
-    // 5. Inicializar el cliente de Anthropic
-    const anthropic = new Anthropic({
-      apiKey: apiKey,
-    });
-
-    // 6. Construir el array de mensajes para la API de Anthropic
-    const messages: Anthropic.MessageParam[] = [
-      ...conversationHistory.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      {
-        role: "user" as const,
-        content: message,
-      },
+    // Construir mensajes
+    const messages = [
+      ...conversationHistory,
+      { role: "user" as const, content: message },
     ];
 
-    // 7. Crear un ReadableStream para implementar Server-Sent Events (SSE)
+    // Crear stream
     const encoder = new TextEncoder();
 
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
-          console.log("[dev-chat] Iniciando streaming con Anthropic...");
-          console.log("[dev-chat] Herramientas disponibles:", AVAILABLE_TOOLS.length);
+          console.log("[dev-chat] Iniciando streaming con", provider);
 
-          // Loop para manejar múltiples rondas de tool use
-          let continueLoop = true;
-          let currentMessages = [...messages];
-
-          while (continueLoop) {
-            // 8. Crear mensaje con herramientas habilitadas y system prompt
-            const response = await anthropic.messages.create({
-              model: claudeModel,
-              max_tokens: 4096,
-              system: systemPrompt,
-              messages: currentMessages,
-              tools: AVAILABLE_TOOLS,
-            });
-
-            console.log("[dev-chat] Respuesta recibida, stop_reason:", response.stop_reason);
-
-            // 9. Procesar el contenido de la respuesta
-            let fullTextContent = "";
-            const toolUses: any[] = [];
-
-            for (const block of response.content) {
-              if (block.type === "text") {
-                // Enviar texto como tokens
-                fullTextContent += block.text;
-
-                const sseEvent: SSETokenEvent = {
-                  type: "token",
-                  content: block.text,
-                };
-
-                const sseData = `data: ${JSON.stringify(sseEvent)}\n\n`;
-                controller.enqueue(encoder.encode(sseData));
-              } else if (block.type === "tool_use") {
-                // Claude quiere usar una herramienta
-                toolUses.push(block);
-
-                // Notificar al cliente que se está usando una herramienta
-                const toolUseEvent: SSEToolUseEvent = {
-                  type: "tool_use",
-                  toolName: block.name,
-                  toolInput: block.input,
-                };
-
-                const toolUseData = `data: ${JSON.stringify(toolUseEvent)}\n\n`;
-                controller.enqueue(encoder.encode(toolUseData));
-              }
-            }
-
-            // 10. Si Claude usó herramientas, ejecutarlas y continuar la conversación
-            if (response.stop_reason === "tool_use" && toolUses.length > 0) {
-              console.log(`[dev-chat] Claude usó ${toolUses.length} herramientas`);
-
-              // Agregar la respuesta de Claude al historial
-              currentMessages.push({
-                role: "assistant",
-                content: response.content,
-              });
-
-              // Ejecutar cada herramienta y recopilar resultados
-              const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-              for (const toolUse of toolUses) {
-                const result = await executeTool(toolUse.name, toolUse.input);
-
-                toolResults.push({
-                  type: "tool_result",
-                  tool_use_id: toolUse.id,
-                  content: result,
-                });
-
-                // Notificar al cliente del resultado de la herramienta
-                const toolResultEvent: SSEToolResultEvent = {
-                  type: "tool_result",
-                  toolName: toolUse.name,
-                  result: result,
-                };
-
-                const toolResultData = `data: ${JSON.stringify(toolResultEvent)}\n\n`;
-                controller.enqueue(encoder.encode(toolResultData));
-              }
-
-              // Agregar los resultados de las herramientas al historial
-              currentMessages.push({
-                role: "user",
-                content: toolResults,
-              });
-
-              // Continuar el loop para obtener la siguiente respuesta de Claude
-              continueLoop = true;
-            } else {
-              // Claude terminó de responder, salir del loop
-              continueLoop = false;
-
-              // Enviar evento de completitud
-              const completeEvent: SSECompleteEvent = {
-                type: "complete",
-                content: fullTextContent,
-              };
-
-              const completeData = `data: ${JSON.stringify(completeEvent)}\n\n`;
-              controller.enqueue(encoder.encode(completeData));
-            }
+          switch (provider) {
+            case "anthropic":
+              await handleAnthropicChat(
+                apiKey!,
+                model,
+                systemPrompt,
+                messages,
+                encoder,
+                controller
+              );
+              break;
+            case "openai":
+              await handleOpenAIChat(
+                apiKey!,
+                model,
+                systemPrompt,
+                messages,
+                encoder,
+                controller
+              );
+              break;
+            case "google":
+              await handleGoogleChat(
+                apiKey!,
+                model,
+                systemPrompt,
+                messages,
+                encoder,
+                controller
+              );
+              break;
           }
 
-          // 11. Cerrar el stream
           controller.close();
           console.log("[dev-chat] Stream cerrado exitosamente");
         } catch (error) {
@@ -591,29 +896,27 @@ export async function POST(req: NextRequest) {
                 : "Error desconocido durante el streaming",
           };
 
-          const errorData = `data: ${JSON.stringify(errorEvent)}\n\n`;
-          controller.enqueue(encoder.encode(errorData));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`)
+          );
           controller.close();
         }
       },
 
-      // Cancelar el stream si el cliente se desconecta
       cancel() {
         console.log("[dev-chat] Stream cancelado por el cliente");
       },
     });
 
-    // 12. Retornar la respuesta con headers apropiados para SSE
     return new Response(readableStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
-        "X-Accel-Buffering": "no", // Deshabilitar buffering en nginx
+        "X-Accel-Buffering": "no",
       },
     });
   } catch (error) {
-    // 13. Manejar errores a nivel de endpoint
     console.error("Error en el endpoint dev-chat:", error);
 
     return NextResponse.json(

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Brain, Code, MessageSquare, FileText, Zap, CheckCircle } from "lucide-react";
-import ApiKeyModal, { hasStoredApiKey } from "@/app/components/ApiKeyModal";
+import ApiKeyModal, { hasAnyApiKey } from "@/app/components/ApiKeyModal";
 
 export default function HomePage() {
   const router = useRouter();
@@ -12,7 +12,7 @@ export default function HomePage() {
 
   const handleOpenDevEnvironment = () => {
     // Si ya tiene una API key guardada, navegar directamente
-    if (hasStoredApiKey()) {
+    if (hasAnyApiKey()) {
       router.push("/dev");
     } else {
       // Si no, mostrar el modal
@@ -35,8 +35,8 @@ export default function HomePage() {
               <Brain className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">AI Dev Companion</h1>
-              <p className="text-xs text-gray-500">Powered by Claude</p>
+              <h1 className="text-xl font-bold text-gray-900">Juliet</h1>
+              <p className="text-xs text-gray-500">AI Development Assistant</p>
             </div>
           </div>
           <button
@@ -62,7 +62,7 @@ export default function HomePage() {
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             A conversational development environment that understands your project,
-            remembers your decisions, and helps you code faster with Claude AI.
+            remembers your decisions, and helps you code faster with Juliet.
           </p>
           <button
             onClick={handleOpenDevEnvironment}
@@ -94,7 +94,7 @@ export default function HomePage() {
               Conversational Development
             </h4>
             <p className="text-gray-600">
-              Chat naturally with Claude to read files, write code, run commands,
+              Chat naturally with Juliet to read files, write code, run commands,
               and get intelligent suggestions in real-time.
             </p>
           </motion.div>
@@ -114,7 +114,7 @@ export default function HomePage() {
             </h4>
             <p className="text-gray-600">
               Your project context, decisions, and progress are remembered across
-              sessions. Claude always knows where you left off.
+              sessions. Juliet always knows where you left off.
             </p>
           </motion.div>
 
@@ -132,7 +132,7 @@ export default function HomePage() {
               Direct File Operations
             </h4>
             <p className="text-gray-600">
-              Claude can read, write, and modify files directly. No copy-paste needed.
+              Juliet can read, write, and modify files directly. No copy-paste needed.
               Just describe what you want, and it happens.
             </p>
           </motion.div>
@@ -151,7 +151,7 @@ export default function HomePage() {
               Command Execution
             </h4>
             <p className="text-gray-600">
-              Run npm, git, and other commands through conversation. Claude executes
+              Run npm, git, and other commands through conversation. Juliet executes
               them safely and shows you the output.
             </p>
           </motion.div>
@@ -252,7 +252,7 @@ export default function HomePage() {
               <p className="text-gray-600">
                 Run <code className="bg-gray-100 px-2 py-1 rounded text-sm">npm run dev</code>,
                 open <code className="bg-gray-100 px-2 py-1 rounded text-sm">/dev</code>,
-                complete the onboarding, and start coding with Claude!
+                complete the onboarding, and start coding with Juliet!
               </p>
             </div>
           </div>
@@ -287,7 +287,7 @@ export default function HomePage() {
       <footer className="border-t border-gray-200 bg-white/50 mt-20">
         <div className="max-w-7xl mx-auto px-4 py-8 text-center text-gray-600">
           <p>
-            Built with Next.js 15, TypeScript, and Claude AI
+            Built with Next.js 15, TypeScript, and Multi-AI Support
           </p>
           <p className="text-sm mt-2">
             Open source under MIT License
