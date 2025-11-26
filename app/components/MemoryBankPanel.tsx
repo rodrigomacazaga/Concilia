@@ -59,6 +59,106 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
   );
 }
 
+// Large modal for file editing
+interface FileEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  fileName: string;
+  content: string;
+  onSave: (content: string) => Promise<void>;
+  saving: boolean;
+  readOnly?: boolean;
+}
+
+function FileEditorModal({
+  isOpen,
+  onClose,
+  fileName,
+  content,
+  onSave,
+  saving,
+  readOnly = false,
+}: FileEditorModalProps) {
+  const [editContent, setEditContent] = useState(content);
+
+  useEffect(() => {
+    setEditContent(content);
+  }, [content]);
+
+  if (!isOpen) return null;
+
+  const handleSave = async () => {
+    await onSave(editContent);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative bg-white rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-orange-500" />
+            <h3 className="font-semibold text-gray-900">{fileName}</h3>
+            {readOnly && (
+              <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
+                Solo lectura
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!readOnly && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Guardar
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-gray-200 rounded text-gray-500"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden">
+          {readOnly ? (
+            <pre className="h-full p-4 text-sm font-mono overflow-auto whitespace-pre-wrap bg-gray-50">
+              {content}
+            </pre>
+          ) : (
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="w-full h-full p-4 text-sm font-mono resize-none focus:outline-none border-0"
+              placeholder="Contenido del archivo..."
+              spellCheck={false}
+            />
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // Toast notification component
 interface ToastProps {
   message: string;
@@ -142,8 +242,7 @@ export function MemoryBankPanel({
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState<string>("");
+  const [showEditorModal, setShowEditorModal] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     general: true,
@@ -227,7 +326,6 @@ export function MemoryBankPanel({
 
       if (file) {
         setFileContent(file.content);
-        setEditContent(file.content);
       }
     }
   }, [selectedFile, currentService, localMB, generalMB]);
@@ -330,7 +428,7 @@ export function MemoryBankPanel({
     }
   };
 
-  const handleSaveFile = async () => {
+  const handleSaveFile = async (newContent: string) => {
     if (!selectedFile || !currentService) return;
 
     setSaving(true);
@@ -343,19 +441,23 @@ export function MemoryBankPanel({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fileName: selectedFile,
-            content: editContent,
+            content: newContent,
             triggerSync: true,
           }),
         }
       );
 
       if (res.ok) {
-        setFileContent(editContent);
-        setIsEditing(false);
+        setFileContent(newContent);
+        setShowEditorModal(false);
+        showToast("Archivo guardado exitosamente", "success");
         await loadMemoryBanks();
+      } else {
+        showToast("Error al guardar el archivo", "error");
       }
     } catch (error) {
       console.error("Error saving file:", error);
+      showToast("Error de conexión al guardar", "error");
     } finally {
       setSaving(false);
     }
@@ -474,7 +576,6 @@ export function MemoryBankPanel({
                         onClick={() => {
                           setSelectedFile(file.name);
                           onServiceSelect?.(null);
-                          setIsEditing(false);
                         }}
                         className={`w-full p-1.5 text-left text-xs rounded flex items-center gap-2 hover:bg-gray-100 ${
                           selectedFile === file.name && !currentService
@@ -528,7 +629,6 @@ export function MemoryBankPanel({
                         onClick={() => {
                           onServiceSelect?.(service.name);
                           setSelectedFile(null);
-                          setIsEditing(false);
                         }}
                         className={`w-full p-1.5 text-left text-xs rounded flex items-center justify-between hover:bg-gray-100 ${
                           currentService === service.name ? "bg-blue-100" : ""
@@ -558,7 +658,6 @@ export function MemoryBankPanel({
                               key={file.name}
                               onClick={() => {
                                 setSelectedFile(file.name);
-                                setIsEditing(false);
                               }}
                               className={`w-full p-1 text-left text-[11px] rounded flex items-center gap-2 hover:bg-gray-100 ${
                                 selectedFile === file.name ? "bg-orange-50" : ""
@@ -602,68 +701,52 @@ export function MemoryBankPanel({
         </div>
       </div>
 
-      {/* File Preview/Editor */}
+      {/* File Preview - Compact */}
       {selectedFile && (
-        <div className="border-t bg-white flex flex-col max-h-[40%]">
+        <div className="border-t bg-white">
           <div className="p-2 border-b text-xs font-medium bg-gray-50 flex items-center justify-between">
-            <span className="truncate">{selectedFile}</span>
+            <div className="flex items-center gap-2 truncate">
+              <FileText className="w-3 h-3 text-orange-500 flex-shrink-0" />
+              <span className="truncate">{selectedFile}</span>
+            </div>
             <div className="flex items-center gap-1">
-              {currentService && !isEditing && (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="p-1 hover:bg-gray-200 rounded"
-                  title="Editar"
-                >
-                  <Edit3 className="w-3 h-3" />
-                </button>
-              )}
-              {isEditing && (
-                <>
-                  <button
-                    onClick={() => {
-                      setIsEditing(false);
-                      setEditContent(fileContent);
-                    }}
-                    className="p-1 hover:bg-gray-200 rounded text-gray-500"
-                    title="Cancelar"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={handleSaveFile}
-                    disabled={saving}
-                    className="p-1 hover:bg-green-100 rounded text-green-600"
-                    title="Guardar"
-                  >
-                    <Save
-                      className={`w-3 h-3 ${saving ? "animate-pulse" : ""}`}
-                    />
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setShowEditorModal(true)}
+                className="p-1 hover:bg-gray-200 rounded text-gray-600"
+                title={currentService ? "Editar archivo" : "Ver archivo"}
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
               <button
                 onClick={() => setSelectedFile(null)}
-                className="p-1 hover:bg-gray-200 rounded"
+                className="p-1 hover:bg-gray-200 rounded text-gray-400"
               >
                 <X className="w-3 h-3" />
               </button>
             </div>
           </div>
-
-          {isEditing ? (
-            <textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="flex-1 p-2 text-xs font-mono resize-none focus:outline-none"
-              placeholder="Contenido del archivo..."
-            />
-          ) : (
-            <pre className="flex-1 p-2 text-xs overflow-auto whitespace-pre-wrap font-mono">
-              {fileContent}
-            </pre>
-          )}
+          <pre className="p-2 text-[11px] overflow-auto whitespace-pre-wrap font-mono text-gray-600 max-h-32 line-clamp-6">
+            {fileContent.substring(0, 500)}{fileContent.length > 500 ? "..." : ""}
+          </pre>
+          <button
+            onClick={() => setShowEditorModal(true)}
+            className="w-full p-1.5 text-xs text-center text-orange-600 hover:bg-orange-50 border-t"
+          >
+            {currentService ? "Abrir editor completo" : "Ver contenido completo"}
+          </button>
         </div>
       )}
+
+      {/* Modal de edición de archivos */}
+      <FileEditorModal
+        isOpen={showEditorModal}
+        onClose={() => setShowEditorModal(false)}
+        fileName={selectedFile || ""}
+        content={fileContent}
+        onSave={handleSaveFile}
+        saving={saving}
+        readOnly={!currentService}
+      />
 
       {/* Modal para crear servicio */}
       <Modal
