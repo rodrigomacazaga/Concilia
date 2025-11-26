@@ -14,7 +14,9 @@ import {
   Edit3,
   AlertCircle,
   FolderSearch,
+  Palette,
 } from "lucide-react";
+import { PRESET_THEMES, PRESET_COLORS } from "@/lib/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { FolderPicker } from "./FolderPicker";
 
@@ -27,6 +29,10 @@ interface Project {
   memoryBankPath?: string;
   createdAt: string;
   updatedAt: string;
+  theme?: {
+    name: string;
+    url?: string;
+  };
 }
 
 interface MemoryBankFile {
@@ -48,6 +54,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
     path: "",
     gitUrl: "",
     description: "",
+    themeUrl: "",
   });
   const [addLoading, setAddLoading] = useState(false);
 
@@ -131,6 +138,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
           path: newProject.path || undefined,
           gitUrl: newProject.gitUrl || undefined,
           description: newProject.description || undefined,
+          themeUrl: newProject.themeUrl || undefined,
         }),
       });
 
@@ -139,7 +147,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
       if (data.success && data.project) {
         setProjects([...projects, data.project]);
         setShowAddForm(false);
-        setNewProject({ name: "", path: "", gitUrl: "", description: "" });
+        setNewProject({ name: "", path: "", gitUrl: "", description: "", themeUrl: "" });
         onSelect(data.project.id);
       }
     } catch (error) {
@@ -391,6 +399,45 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
             onChange={(e) => setNewProject({ ...newProject, gitUrl: e.target.value })}
             className="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
+
+          {/* Theme selector */}
+          <div className="space-y-1">
+            <label className="text-xs text-gray-500 flex items-center gap-1">
+              <Palette className="w-3 h-3" />
+              Tema (opcional)
+            </label>
+            <select
+              value={newProject.themeUrl}
+              onChange={(e) => setNewProject({ ...newProject, themeUrl: e.target.value })}
+              className="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+            >
+              <option value="">Sin tema</option>
+              <optgroup label="Temas Populares">
+                {Object.entries(PRESET_THEMES).map(([name, url]) => (
+                  <option key={name} value={url}>
+                    {name.charAt(0).toUpperCase() + name.slice(1)}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            {newProject.themeUrl && (() => {
+              const themeName = Object.entries(PRESET_THEMES).find(([_, url]) => url === newProject.themeUrl)?.[0];
+              const colors = themeName ? PRESET_COLORS[themeName] : undefined;
+              return colors ? (
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="text-xs text-gray-400">Preview:</span>
+                  {colors.map((color, i) => (
+                    <div
+                      key={i}
+                      className="w-4 h-4 rounded-full border border-gray-200"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              ) : null;
+            })()}
+          </div>
+
           <div className="flex gap-2">
             <button
               type="submit"
@@ -467,6 +514,12 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
                         <span className="flex items-center text-xs text-orange-500">
                           <BookOpen className="w-3 h-3 mr-0.5" />
                           MB
+                        </span>
+                      )}
+                      {project.theme && (
+                        <span className="flex items-center text-xs text-purple-500">
+                          <Palette className="w-3 h-3 mr-0.5" />
+                          {project.theme.name}
                         </span>
                       )}
                     </div>
