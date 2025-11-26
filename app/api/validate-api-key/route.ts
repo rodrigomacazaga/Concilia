@@ -106,8 +106,15 @@ async function validateAnthropicKey(apiKey: string): Promise<NextResponse> {
       return NextResponse.json({ valid: true });
     }
 
-    // Para otros errores, asumimos que la key podría ser válida
-    return NextResponse.json({ valid: true });
+    // Para otros errores (network, timeout, etc.), indicar que no se pudo verificar
+    return NextResponse.json(
+      {
+        valid: false,
+        error: "No se pudo verificar la API key. Verifica tu conexión e intenta de nuevo.",
+        recoverable: true
+      },
+      { status: 503 }
+    );
   }
 }
 
@@ -132,12 +139,30 @@ async function validateGoogleKey(apiKey: string): Promise<NextResponse> {
       );
     }
 
-    // Para otros errores, intentar otra validación
-    return NextResponse.json({ valid: true });
+    // Para otros errores (rate limit, server issues)
+    if (response.status === 429) {
+      return NextResponse.json({ valid: true });
+    }
+
+    return NextResponse.json(
+      {
+        valid: false,
+        error: "No se pudo verificar la API key. Intenta de nuevo.",
+        recoverable: true
+      },
+      { status: 503 }
+    );
   } catch (error: any) {
     console.error("[validate-api-key] Error de Google:", error.message);
-    // En caso de error de red, asumir que podría ser válida
-    return NextResponse.json({ valid: true });
+    // En caso de error de red, indicar que no se pudo verificar
+    return NextResponse.json(
+      {
+        valid: false,
+        error: "Error de conexión. Verifica tu red e intenta de nuevo.",
+        recoverable: true
+      },
+      { status: 503 }
+    );
   }
 }
 
@@ -163,11 +188,30 @@ async function validateOpenAIKey(apiKey: string): Promise<NextResponse> {
       );
     }
 
-    // Para otros errores (rate limit, etc.), asumir válida
-    return NextResponse.json({ valid: true });
+    // Rate limit significa que la key es válida
+    if (response.status === 429) {
+      return NextResponse.json({ valid: true });
+    }
+
+    // Para otros errores, indicar que no se pudo verificar
+    return NextResponse.json(
+      {
+        valid: false,
+        error: "No se pudo verificar la API key. Intenta de nuevo.",
+        recoverable: true
+      },
+      { status: 503 }
+    );
   } catch (error: any) {
     console.error("[validate-api-key] Error de OpenAI:", error.message);
-    // En caso de error de red, asumir que podría ser válida
-    return NextResponse.json({ valid: true });
+    // En caso de error de red, indicar que no se pudo verificar
+    return NextResponse.json(
+      {
+        valid: false,
+        error: "Error de conexión. Verifica tu red e intenta de nuevo.",
+        recoverable: true
+      },
+      { status: 503 }
+    );
   }
 }

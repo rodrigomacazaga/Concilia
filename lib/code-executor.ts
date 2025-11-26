@@ -3,7 +3,7 @@
  * Parsea respuestas de Claude y ejecuta/crea archivos automáticamente
  */
 
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
 
 interface CodeBlock {
@@ -150,14 +150,19 @@ export async function parseAndExecuteCodeBlocks(options: {
     try {
       // Crear directorios padre si no existen
       const dir = path.dirname(fullPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      await fs.mkdir(dir, { recursive: true });
+
+      // Verificar si el archivo existe
+      let exists = false;
+      try {
+        await fs.access(fullPath);
+        exists = true;
+      } catch {
+        // El archivo no existe, está bien
       }
 
-      const exists = fs.existsSync(fullPath);
-
       // Escribir archivo
-      fs.writeFileSync(fullPath, block.content, "utf-8");
+      await fs.writeFile(fullPath, block.content, "utf-8");
 
       if (exists) {
         result.filesUpdated.push(normalizedPath);

@@ -13,6 +13,7 @@ import {
   GitBranch,
   Server,
   Palette,
+  Activity,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDevContext } from "@/app/lib/DevContext";
@@ -25,6 +26,7 @@ import { MemoryBankPanel } from "@/app/components/MemoryBankPanel";
 import GitPanel from "@/app/components/GitPanel";
 import MCPServerPanel from "@/app/components/MCPServerPanel";
 import DesignSystemPanel from "@/app/components/DesignSystemPanel";
+import ObservabilityPanel from "@/app/components/ObservabilityPanel";
 
 interface PreviewPanelProps {
   projectId?: string | null;
@@ -34,7 +36,7 @@ interface PreviewPanelProps {
   onServiceSelect?: (service: string | null) => void;
 }
 
-type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system";
+type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system" | "observability";
 
 export default function PreviewPanel({
   projectId,
@@ -102,6 +104,11 @@ export default function PreviewPanel({
       id: "design-system" as TabId,
       label: "DS",
       icon: Palette,
+    },
+    {
+      id: "observability" as TabId,
+      label: "Obs",
+      icon: Activity,
     },
   ];
 
@@ -266,6 +273,10 @@ export default function PreviewPanel({
 
           {activePreviewTab === "design-system" && (
             <DesignSystemPanel projectId={projectId} />
+          )}
+
+          {activePreviewTab === "observability" && (
+            <ObservabilityPanel />
           )}
         </motion.div>
       </div>
