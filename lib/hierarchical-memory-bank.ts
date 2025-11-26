@@ -70,18 +70,20 @@ export async function getGeneralMemoryBank(
 ): Promise<GeneralMemoryBank> {
   const mbPath = path.join(projectPath, "memory-bank");
 
+  // Siempre detectar servicios, incluso si el MB general no existe
+  const services = await detectServicesWithMemoryBank(projectPath);
+
   if (!(await fileExists(mbPath))) {
     return {
       exists: false,
       projectName,
       projectPath,
       files: [],
-      services: [],
+      services,
     };
   }
 
   const files = await readMdFiles(mbPath);
-  const services = await detectServicesWithMemoryBank(projectPath);
 
   return {
     exists: true,
