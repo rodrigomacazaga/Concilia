@@ -11,6 +11,7 @@ import {
   PROVIDERS,
 } from "@/lib/ai-providers";
 import { Mode, MODE_CONFIGS, loadModeContext } from "@/lib/modes";
+import { designSystemPostHook, HookResult } from "@/lib/design-system";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -55,12 +56,22 @@ interface SSEErrorEvent {
   message: string;
 }
 
+interface SSEDesignSystemEvent {
+  type: "design_system";
+  analyzed: boolean;
+  newComponents: number;
+  violations: number;
+  updated: boolean;
+  suggestions: string[];
+}
+
 type SSEEvent =
   | SSETokenEvent
   | SSEToolUseEvent
   | SSEToolResultEvent
   | SSECompleteEvent
-  | SSEErrorEvent;
+  | SSEErrorEvent
+  | SSEDesignSystemEvent;
 
 // Modelo por defecto
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
@@ -416,6 +427,7 @@ async function executeTool(toolName: string, toolInput: any): Promise<string> {
 
 /**
  * Handler para Anthropic (Claude)
+ * Returns the full response content for post-processing
  */
 async function handleAnthropicChat(
   apiKey: string,
@@ -424,7 +436,7 @@ async function handleAnthropicChat(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   encoder: TextEncoder,
   controller: ReadableStreamDefaultController
-): Promise<void> {
+): Promise<string> {
   const anthropic = new Anthropic({ apiKey });
 
   let continueLoop = true;
@@ -520,12 +532,17 @@ async function handleAnthropicChat(
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
       );
+
+      return fullTextContent;
     }
   }
+
+  return "";
 }
 
 /**
  * Handler para OpenAI (GPT)
+ * Returns the full response content for post-processing
  */
 async function handleOpenAIChat(
   apiKey: string,
@@ -534,7 +551,7 @@ async function handleOpenAIChat(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   encoder: TextEncoder,
   controller: ReadableStreamDefaultController
-): Promise<void> {
+): Promise<string> {
   const openai = new OpenAI({ apiKey });
 
   // Convertir herramientas al formato OpenAI
@@ -697,12 +714,17 @@ async function handleOpenAIChat(
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
       );
+
+      return fullTextContent;
     }
   }
+
+  return "";
 }
 
 /**
  * Handler para Google (Gemini)
+ * Returns the full response content for post-processing
  */
 async function handleGoogleChat(
   apiKey: string,
@@ -711,7 +733,7 @@ async function handleGoogleChat(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   encoder: TextEncoder,
   controller: ReadableStreamDefaultController
-): Promise<void> {
+): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const gemini = genAI.getGenerativeModel({ model });
 
@@ -761,6 +783,8 @@ async function handleGoogleChat(
   controller.enqueue(
     encoder.encode(`data: ${JSON.stringify(completeEvent)}\n\n`)
   );
+
+  return fullTextContent;
 }
 
 /**
@@ -870,6 +894,17 @@ export async function POST(req: NextRequest) {
       { role: "user" as const, content: message },
     ];
 
+    // Obtener project path para el hook de Design System
+    let projectPath: string | null = null;
+    if (projectId) {
+      try {
+        const project = await getProject(projectId);
+        projectPath = project?.path || null;
+      } catch {
+        // Ignorar error
+      }
+    }
+
     // Crear stream
     const encoder = new TextEncoder();
 
@@ -878,9 +913,11 @@ export async function POST(req: NextRequest) {
         try {
           console.log("[dev-chat] Iniciando streaming con", provider);
 
+          let fullContent = "";
+
           switch (provider) {
             case "anthropic":
-              await handleAnthropicChat(
+              fullContent = await handleAnthropicChat(
                 apiKey!,
                 model,
                 systemPrompt,
@@ -890,7 +927,7 @@ export async function POST(req: NextRequest) {
               );
               break;
             case "openai":
-              await handleOpenAIChat(
+              fullContent = await handleOpenAIChat(
                 apiKey!,
                 model,
                 systemPrompt,
@@ -900,7 +937,7 @@ export async function POST(req: NextRequest) {
               );
               break;
             case "google":
-              await handleGoogleChat(
+              fullContent = await handleGoogleChat(
                 apiKey!,
                 model,
                 systemPrompt,
@@ -910,6 +947,37 @@ export async function POST(req: NextRequest) {
               );
               break;
           }
+
+          // === HOOK: Auto-actualizar Design System ===
+          if (projectPath && (mode === 'execute' || mode === 'deepThink')) {
+            try {
+              const dsResult = await designSystemPostHook({
+                projectPath,
+                generatedCode: fullContent,
+                autoUpdate: true,
+                mode
+              });
+
+              if (dsResult.analyzed) {
+                console.log(`[dev-chat] Design System: ${dsResult.newComponents} nuevos, ${dsResult.violations} violaciones`);
+
+                const dsEvent: SSEDesignSystemEvent = {
+                  type: "design_system",
+                  analyzed: dsResult.analyzed,
+                  newComponents: dsResult.newComponents,
+                  violations: dsResult.violations,
+                  updated: dsResult.updated,
+                  suggestions: dsResult.suggestions
+                };
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify(dsEvent)}\n\n`)
+                );
+              }
+            } catch (err) {
+              console.error("[dev-chat] Design System hook error:", err);
+            }
+          }
+          // === FIN HOOK ===
 
           controller.close();
           console.log("[dev-chat] Stream cerrado exitosamente");
