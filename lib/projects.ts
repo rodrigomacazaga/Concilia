@@ -2,6 +2,14 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import {
+  fetchTheme,
+  parseTheme,
+  generateDesignSystemMD,
+  generateComponentLibraryMD,
+  generateStyleTokensMD,
+  ParsedTheme
+} from "./themes";
 
 const execAsync = promisify(exec);
 
@@ -18,6 +26,10 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   memoryBankPath?: string;
+  theme?: {
+    name: string;
+    url?: string;
+  };
 }
 
 export interface GitStatus {
@@ -70,6 +82,7 @@ export async function createProject(data: {
   path?: string;
   gitUrl?: string;
   description?: string;
+  themeUrl?: string;
 }): Promise<Project> {
   const projects = await loadProjects();
 
@@ -121,6 +134,46 @@ export async function createProject(data: {
     }
   }
 
+  // Procesar tema TweakCN si se especifica
+  let parsedTheme: ParsedTheme | undefined;
+  if (data.themeUrl && projectPath) {
+    try {
+      const rawTheme = await fetchTheme(data.themeUrl);
+      parsedTheme = parseTheme(rawTheme);
+
+      // Crear Memory Bank si no existe
+      const mbPath = path.join(projectPath, "memory-bank");
+      await fs.mkdir(mbPath, { recursive: true });
+      memoryBankPath = mbPath;
+
+      // Generar archivos de Design System en Memory Bank
+      const designSystemMD = generateDesignSystemMD(parsedTheme, data.name);
+      const componentLibraryMD = generateComponentLibraryMD(parsedTheme, data.name);
+      const styleTokensMD = generateStyleTokensMD(parsedTheme, data.name);
+
+      await fs.writeFile(path.join(mbPath, "10-DESIGN-SYSTEM.md"), designSystemMD);
+      await fs.writeFile(path.join(mbPath, "11-COMPONENT-LIBRARY.md"), componentLibraryMD);
+      await fs.writeFile(path.join(mbPath, "12-STYLE-TOKENS.md"), styleTokensMD);
+
+      // Crear globals.css en el proyecto
+      const stylesDir = path.join(projectPath, "app");
+      try {
+        await fs.access(stylesDir);
+      } catch {
+        await fs.mkdir(stylesDir, { recursive: true });
+      }
+      await fs.writeFile(path.join(stylesDir, "globals.css"), parsedTheme.cssVariables);
+
+      // Crear tailwind.config.ts
+      await fs.writeFile(path.join(projectPath, "tailwind.config.ts"), parsedTheme.tailwindConfig);
+
+      console.log(`Theme "${parsedTheme.name}" applied to project "${data.name}"`);
+    } catch (error: any) {
+      console.error(`Error applying theme: ${error.message}`);
+      // Continue without theme - don't fail project creation
+    }
+  }
+
   const project: Project = {
     id,
     name: data.name,
@@ -130,6 +183,10 @@ export async function createProject(data: {
     createdAt: now,
     updatedAt: now,
     memoryBankPath,
+    theme: parsedTheme ? {
+      name: parsedTheme.name,
+      url: data.themeUrl,
+    } : undefined,
   };
 
   projects.push(project);
