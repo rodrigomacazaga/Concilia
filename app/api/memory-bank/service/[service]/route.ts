@@ -4,7 +4,7 @@
 // Actualiza un archivo del Memory Bank local
 
 import { NextRequest, NextResponse } from "next/server";
-import { getProject } from "@/lib/projects";
+import { getProject, ensureProjectPath } from "@/lib/projects";
 import {
   getLocalMemoryBank,
   updateLocalMemoryBankFile,
@@ -28,7 +28,7 @@ export async function GET(
     }
 
     // Cargar proyecto
-    const project = await getProject(projectId);
+    let project = await getProject(projectId);
 
     if (!project) {
       return NextResponse.json(
@@ -37,12 +37,8 @@ export async function GET(
       );
     }
 
-    if (!project.path) {
-      return NextResponse.json(
-        { error: "Project has no path configured" },
-        { status: 400 }
-      );
-    }
+    // Asegurar que el proyecto tenga un path válido
+    project = await ensureProjectPath(project);
 
     // Obtener Memory Bank local del servicio
     const localMB = await getLocalMemoryBank(project.path, service);
@@ -90,7 +86,7 @@ export async function POST(
     }
 
     // Cargar proyecto
-    const project = await getProject(projectId);
+    let project = await getProject(projectId);
 
     if (!project) {
       return NextResponse.json(
@@ -99,12 +95,8 @@ export async function POST(
       );
     }
 
-    if (!project.path) {
-      return NextResponse.json(
-        { error: "Project has no path configured" },
-        { status: 400 }
-      );
-    }
+    // Asegurar que el proyecto tenga un path válido
+    project = await ensureProjectPath(project);
 
     // Actualizar archivo
     const result = await updateLocalMemoryBankFile(

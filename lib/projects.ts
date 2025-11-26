@@ -90,6 +90,16 @@ export async function createProject(data: {
     }
   }
 
+  // Si no hay path ni gitUrl, crear directorio workspace
+  if (!projectPath && !data.gitUrl) {
+    // Sanitizar nombre para usar como directorio
+    const safeName = data.name.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+    projectPath = path.join(WORKSPACES_DIR, safeName);
+
+    // Crear directorio
+    await fs.mkdir(projectPath, { recursive: true });
+  }
+
   // Verificar que el path existe
   if (projectPath) {
     try {
@@ -146,6 +156,23 @@ export async function updateProject(id: string, data: Partial<Project>): Promise
 
   await saveProjects(projects);
   return projects[index];
+}
+
+// Asegurar que un proyecto tenga un path válido (crear workspace si no existe)
+export async function ensureProjectPath(project: Project): Promise<Project> {
+  if (project.path && project.path.trim() !== "") {
+    return project;
+  }
+
+  // Crear directorio workspace para el proyecto
+  const safeName = project.name.replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+  const projectPath = path.join(WORKSPACES_DIR, safeName);
+
+  await fs.mkdir(projectPath, { recursive: true });
+
+  // Actualizar proyecto con el nuevo path
+  const updated = await updateProject(project.id, { path: projectPath });
+  return updated || project;
 }
 
 // Eliminar un proyecto

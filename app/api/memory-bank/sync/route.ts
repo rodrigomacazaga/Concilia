@@ -2,7 +2,7 @@
 // Sincroniza Memory Banks locales con el general
 
 import { NextRequest, NextResponse } from "next/server";
-import { getProject } from "@/lib/projects";
+import { getProject, ensureProjectPath } from "@/lib/projects";
 import {
   syncLocalToGeneral,
   syncAllServices,
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Cargar proyecto
-    const project = await getProject(projectId);
+    let project = await getProject(projectId);
 
     if (!project) {
       return NextResponse.json(
@@ -30,12 +30,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!project.path) {
-      return NextResponse.json(
-        { error: "Project has no path configured" },
-        { status: 400 }
-      );
-    }
+    // Asegurar que el proyecto tenga un path válido
+    project = await ensureProjectPath(project);
 
     if (service) {
       // Sincronizar un servicio específico
