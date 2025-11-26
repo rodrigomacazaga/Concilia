@@ -15,6 +15,7 @@ import {
   Palette,
   Activity,
   Bot,
+  TrendingUp,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDevContext } from "@/app/lib/DevContext";
@@ -29,6 +30,7 @@ import MCPServerPanel from "@/app/components/MCPServerPanel";
 import DesignSystemPanel from "@/app/components/DesignSystemPanel";
 import ObservabilityPanel from "@/app/components/ObservabilityPanel";
 import AutonomousPanel from "@/app/components/AutonomousPanel";
+import DevelopmentDashboard from "@/app/components/DevelopmentDashboard";
 
 interface PreviewPanelProps {
   projectId?: string | null;
@@ -38,7 +40,7 @@ interface PreviewPanelProps {
   onServiceSelect?: (service: string | null) => void;
 }
 
-type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system" | "observability" | "agent";
+type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system" | "observability" | "agent" | "dashboard";
 
 export default function PreviewPanel({
   projectId,
@@ -116,6 +118,11 @@ export default function PreviewPanel({
       id: "agent" as TabId,
       label: "Agent",
       icon: Bot,
+    },
+    {
+      id: "dashboard" as TabId,
+      label: "Dev",
+      icon: TrendingUp,
     },
   ];
 
@@ -288,6 +295,10 @@ export default function PreviewPanel({
 
           {activePreviewTab === "agent" && (
             <AutonomousPanel />
+          )}
+
+          {activePreviewTab === "dashboard" && (
+            <DevelopmentDashboard sessionId={projectId || "default"} />
           )}
         </motion.div>
       </div>
