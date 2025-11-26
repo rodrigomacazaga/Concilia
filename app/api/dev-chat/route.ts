@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai-providers";
 import { Mode, MODE_CONFIGS, loadModeContext } from "@/lib/modes";
 import { designSystemPostHook, HookResult } from "@/lib/design-system";
+import { parseAndExecuteCodeBlocks, analyzeCodeBlocks } from "@/lib/code-executor";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -65,13 +66,22 @@ interface SSEDesignSystemEvent {
   suggestions: string[];
 }
 
+interface SSECodeExecutionEvent {
+  type: "code_execution";
+  executed: boolean;
+  filesCreated: string[];
+  filesUpdated: string[];
+  errors: string[];
+}
+
 type SSEEvent =
   | SSETokenEvent
   | SSEToolUseEvent
   | SSEToolResultEvent
   | SSECompleteEvent
   | SSEErrorEvent
-  | SSEDesignSystemEvent;
+  | SSEDesignSystemEvent
+  | SSECodeExecutionEvent;
 
 // Modelo por defecto
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
@@ -977,7 +987,45 @@ export async function POST(req: NextRequest) {
               console.error("[dev-chat] Design System hook error:", err);
             }
           }
-          // === FIN HOOK ===
+          // === FIN HOOK Design System ===
+
+          // === HOOK: Auto-ejecutar código ===
+          if (projectPath && (mode === 'execute' || mode === 'deepThink')) {
+            try {
+              // Analizar si hay código ejecutable
+              const codeAnalysis = analyzeCodeBlocks(fullContent);
+
+              if (codeAnalysis.hasExecutableCode) {
+                console.log(`[dev-chat] Código detectado: ${codeAnalysis.fileCount} archivos`);
+
+                // Ejecutar automáticamente en modo execute/deepThink
+                const executionResult = await parseAndExecuteCodeBlocks({
+                  projectId: projectId || '',
+                  projectPath,
+                  response: fullContent,
+                  autoExecute: true
+                });
+
+                if (executionResult.executed) {
+                  console.log(`[dev-chat] Código ejecutado: ${executionResult.filesCreated.length} creados, ${executionResult.filesUpdated.length} actualizados`);
+
+                  const codeEvent: SSECodeExecutionEvent = {
+                    type: "code_execution",
+                    executed: executionResult.executed,
+                    filesCreated: executionResult.filesCreated,
+                    filesUpdated: executionResult.filesUpdated,
+                    errors: executionResult.errors
+                  };
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify(codeEvent)}\n\n`)
+                  );
+                }
+              }
+            } catch (err) {
+              console.error("[dev-chat] Code execution hook error:", err);
+            }
+          }
+          // === FIN HOOK Code Execution ===
 
           controller.close();
           console.log("[dev-chat] Stream cerrado exitosamente");
