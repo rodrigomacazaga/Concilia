@@ -196,9 +196,9 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b bg-white">
+      <div className="px-4 py-3 border-b bg-white">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
             <FolderOpen className="w-5 h-5 text-orange-500" />
             Proyectos
           </h2>

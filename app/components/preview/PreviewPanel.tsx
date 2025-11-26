@@ -19,13 +19,15 @@ import ChangesList from "./ChangesList";
 import CodeViewer from "./CodeViewer";
 import TerminalOutput from "./TerminalOutput";
 import ConversationHistory from "@/app/components/ConversationHistory";
-import MemoryBankViewer from "@/app/components/MemoryBankViewer";
+import { MemoryBankPanel } from "@/app/components/MemoryBankPanel";
 import GitPanel from "@/app/components/GitPanel";
 
 interface PreviewPanelProps {
   projectId?: string | null;
   selectedConversation?: string | null;
   onSelectConversation?: (id: string | null) => void;
+  currentService?: string | null;
+  onServiceSelect?: (service: string | null) => void;
 }
 
 type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git";
@@ -34,6 +36,8 @@ export default function PreviewPanel({
   projectId,
   selectedConversation,
   onSelectConversation,
+  currentService,
+  onServiceSelect,
 }: PreviewPanelProps) {
   const {
     activePreviewTab,
@@ -217,7 +221,11 @@ export default function PreviewPanel({
           )}
 
           {activePreviewTab === "memory-bank" && projectId && (
-            <MemoryBankViewer projectId={projectId} />
+            <MemoryBankPanel
+              projectId={projectId}
+              currentService={currentService}
+              onServiceSelect={onServiceSelect}
+            />
           )}
 
           {activePreviewTab === "memory-bank" && !projectId && (

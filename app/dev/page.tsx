@@ -32,9 +32,10 @@ function DevChatContent() {
   // Paneles
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 
-  // Proyecto y conversación seleccionados
+  // Proyecto, conversación y servicio seleccionados
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [currentService, setCurrentService] = useState<string | null>(null);
 
   const {
     addFileChange,
@@ -137,6 +138,7 @@ function DevChatContent() {
             conversationHistory: conversationHistory,
             model: model,
             projectId: selectedProject,
+            currentService: currentService,
           }),
         });
 
@@ -303,7 +305,7 @@ function DevChatContent() {
         setIsLoading(false);
       }
     },
-    [messages, addFileChange, selectedProject, runningCommands, addCommand, updateCommand]
+    [messages, addFileChange, selectedProject, currentService, runningCommands, addCommand, updateCommand]
   );
 
   // Manejadores de resize para chat/preview
@@ -351,6 +353,7 @@ function DevChatContent() {
             onSelect={(id) => {
               setSelectedProject(id);
               setSelectedConversation(null);
+              setCurrentService(null);
               setMessages([]);
             }}
             selected={selectedProject}
@@ -428,8 +431,8 @@ function DevChatContent() {
         <div ref={chatContainerRef} className="flex-1 flex overflow-hidden">
           {/* Chat Section */}
           <div
-            className="flex flex-col overflow-hidden"
-            style={{ width: previewCollapsed ? "100%" : `${leftPanelSize}%` }}
+            className={`flex flex-col overflow-hidden ${previewCollapsed || !selectedProject ? "flex-1" : ""}`}
+            style={!previewCollapsed && selectedProject ? { width: `${leftPanelSize}%` } : undefined}
           >
             <ChatContainer>
               {!selectedProject ? (
@@ -527,13 +530,15 @@ function DevChatContent() {
           {/* Preview Panel */}
           {selectedProject && (
             <div
-              className="overflow-hidden"
-              style={{ width: previewCollapsed ? "auto" : `${100 - leftPanelSize}%` }}
+              className={`overflow-hidden ${previewCollapsed ? "flex-shrink-0" : ""}`}
+              style={!previewCollapsed ? { width: `${100 - leftPanelSize}%` } : undefined}
             >
               <PreviewPanel
                 projectId={selectedProject}
                 selectedConversation={selectedConversation}
                 onSelectConversation={setSelectedConversation}
+                currentService={currentService}
+                onServiceSelect={setCurrentService}
               />
             </div>
           )}
