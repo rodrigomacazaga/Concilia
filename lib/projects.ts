@@ -83,6 +83,7 @@ export async function createProject(data: {
   gitUrl?: string;
   description?: string;
   themeUrl?: string;
+  memoryBankFiles?: { name: string; content: string }[];
 }): Promise<Project> {
   const projects = await loadProjects();
 
@@ -171,6 +172,25 @@ export async function createProject(data: {
     } catch (error: any) {
       console.error(`Error applying theme: ${error.message}`);
       // Continue without theme - don't fail project creation
+    }
+  }
+
+  // Guardar archivos de Memory Bank del wizard (si no hay tema)
+  if (data.memoryBankFiles && data.memoryBankFiles.length > 0 && projectPath) {
+    try {
+      const mbPath = path.join(projectPath, "memory-bank");
+      await fs.mkdir(mbPath, { recursive: true });
+      memoryBankPath = mbPath;
+
+      for (const file of data.memoryBankFiles) {
+        const filePath = path.join(mbPath, file.name);
+        await fs.writeFile(filePath, file.content, "utf-8");
+      }
+
+      console.log(`Memory Bank created with ${data.memoryBankFiles.length} files for project "${data.name}"`);
+    } catch (error: any) {
+      console.error(`Error creating Memory Bank: ${error.message}`);
+      // Continue without Memory Bank - don't fail project creation
     }
   }
 

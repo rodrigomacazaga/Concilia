@@ -18,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, path, gitUrl, description, themeUrl } = body;
+    const { name, path, gitUrl, description, themeUrl, memoryBankFiles } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -27,7 +27,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const project = await createProject({ name, path, gitUrl, description, themeUrl });
+    const project = await createProject({
+      name,
+      path,
+      gitUrl,
+      description,
+      themeUrl,
+      memoryBankFiles
+    });
     return NextResponse.json({ success: true, project });
   } catch (error: any) {
     return NextResponse.json(

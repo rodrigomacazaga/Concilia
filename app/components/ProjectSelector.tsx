@@ -19,6 +19,7 @@ import {
 import { PRESET_THEMES, PRESET_COLORS } from "@/lib/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { FolderPicker } from "./FolderPicker";
+import { ProjectWizard } from "./ProjectWizard";
 
 interface Project {
   id: string;
@@ -67,6 +68,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
   const [editingContent, setEditingContent] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -204,6 +206,31 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
 
   const selectedProject = projects.find((p) => p.id === selected);
 
+  // Handler for wizard completion
+  const handleWizardComplete = async (projectData: {
+    name: string;
+    path?: string;
+    gitUrl?: string;
+    description?: string;
+    themeUrl?: string;
+    memoryBankFiles?: { name: string; content: string }[];
+  }) => {
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(projectData),
+    });
+
+    const data = await response.json();
+
+    if (data.success && data.project) {
+      setProjects([...projects, data.project]);
+      onSelect(data.project.id);
+    } else {
+      throw new Error(data.error || "Error al crear proyecto");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -225,7 +252,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
               />
             </button>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => setShowWizard(true)}
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               title="Agregar proyecto"
             >
@@ -478,7 +505,7 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
               <FolderOpen className="w-8 h-8 mx-auto mb-2 text-gray-300" />
               <p>No hay proyectos</p>
               <button
-                onClick={() => setShowAddForm(true)}
+                onClick={() => setShowWizard(true)}
                 className="mt-2 text-orange-500 hover:underline"
               >
                 Agregar proyecto
@@ -565,6 +592,13 @@ export function ProjectSelector({ onSelect, selected }: ProjectSelectorProps) {
 
       {/* Spacer when project is selected */}
       {selected && <div className="flex-1" />}
+
+      {/* Project Wizard Modal */}
+      <ProjectWizard
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
+        onComplete={handleWizardComplete}
+      />
     </div>
   );
 }
