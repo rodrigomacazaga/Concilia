@@ -11,6 +11,8 @@ import {
   MessageSquare,
   BookOpen,
   GitBranch,
+  Server,
+  Palette,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDevContext } from "@/app/lib/DevContext";
@@ -21,6 +23,8 @@ import TerminalOutput from "./TerminalOutput";
 import ConversationHistory from "@/app/components/ConversationHistory";
 import { MemoryBankPanel } from "@/app/components/MemoryBankPanel";
 import GitPanel from "@/app/components/GitPanel";
+import MCPServerPanel from "@/app/components/MCPServerPanel";
+import DesignSystemPanel from "@/app/components/DesignSystemPanel";
 
 interface PreviewPanelProps {
   projectId?: string | null;
@@ -30,7 +34,7 @@ interface PreviewPanelProps {
   onServiceSelect?: (service: string | null) => void;
 }
 
-type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git";
+type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system";
 
 export default function PreviewPanel({
   projectId,
@@ -88,6 +92,16 @@ export default function PreviewPanel({
       id: "git" as TabId,
       label: "Git",
       icon: GitBranch,
+    },
+    {
+      id: "mcp" as TabId,
+      label: "MCP",
+      icon: Server,
+    },
+    {
+      id: "design-system" as TabId,
+      label: "DS",
+      icon: Palette,
     },
   ];
 
@@ -244,6 +258,14 @@ export default function PreviewPanel({
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">
               Selecciona un proyecto para ver Git
             </div>
+          )}
+
+          {activePreviewTab === "mcp" && (
+            <MCPServerPanel projectId={projectId} />
+          )}
+
+          {activePreviewTab === "design-system" && (
+            <DesignSystemPanel projectId={projectId} />
           )}
         </motion.div>
       </div>

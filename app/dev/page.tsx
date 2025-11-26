@@ -12,7 +12,7 @@ import ProjectSelector from "@/app/components/ProjectSelector";
 import { motion } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
 import { GripVertical, Key, PanelLeftClose, PanelLeft } from "lucide-react";
-import { hasAnyApiKey } from "@/app/components/ApiKeyModal";
+import ApiKeyModal, { hasAnyApiKey } from "@/app/components/ApiKeyModal";
 import { getStoredApiKey, getProviderFromModel } from "@/lib/ai-providers";
 import { ModeSelector, Mode, loadPreferences } from "@/app/components/ModeSelector";
 import { ModeIndicator } from "@/app/components/ModeIndicator";
@@ -43,6 +43,7 @@ function DevChatContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
   // Paneles
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -460,20 +461,8 @@ function DevChatContent() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* Mode Selector - solo visible cuando hay proyecto */}
-                {selectedProject && (
-                  <ModeSelector
-                    currentMode={currentMode}
-                    onModeChange={setCurrentMode}
-                    selectedModel={selectedModel}
-                    onModelChange={setSelectedModel}
-                    disabled={isLoading}
-                    availableModels={AVAILABLE_MODELS}
-                  />
-                )}
-
                 <button
-                  onClick={() => router.push("/")}
+                  onClick={() => setShowApiKeyModal(true)}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                   title="Configurar API Keys"
                 >
@@ -494,7 +483,7 @@ function DevChatContent() {
                 <span className="text-sm">No hay API key configurada.</span>
               </div>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => setShowApiKeyModal(true)}
                 className="px-3 py-1 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 transition-colors"
               >
                 Configurar
@@ -585,14 +574,24 @@ function DevChatContent() {
               )}
             </ChatContainer>
 
-            {/* Mode Indicator + Input */}
-            <div className="border-t">
+            {/* Mode Selector + Input (like Cursor/Lovable) */}
+            <div className="border-t bg-white">
               {selectedProject && (
-                <div className="px-4 pt-2">
+                <div className="px-4 pt-3 pb-2 space-y-2">
+                  {/* Mode Indicator - small info bar */}
                   <ModeIndicator
                     mode={currentMode}
                     model={selectedModel}
                     serviceName={currentService}
+                  />
+                  {/* Mode Selector - below indicator, like Cursor */}
+                  <ModeSelector
+                    currentMode={currentMode}
+                    onModeChange={setCurrentMode}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    disabled={isLoading}
+                    availableModels={AVAILABLE_MODELS}
                   />
                 </div>
               )}
@@ -634,6 +633,22 @@ function DevChatContent() {
 
       {/* Notificaciones */}
       <NotificationToast />
+
+      {/* API Key Modal */}
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => {
+          setShowApiKeyModal(false);
+          // Re-check if API keys are configured
+          if (hasAnyApiKey()) {
+            setApiKeyMissing(false);
+          }
+        }}
+        onSuccess={() => {
+          setShowApiKeyModal(false);
+          setApiKeyMissing(false);
+        }}
+      />
     </div>
   );
 }
