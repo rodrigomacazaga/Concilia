@@ -12,7 +12,8 @@ import ProjectSelector from "@/app/components/ProjectSelector";
 import { motion } from "framer-motion";
 import { DevContextProvider, useDevContext } from "@/app/lib/DevContext";
 import { GripVertical, Key, PanelLeftClose, PanelLeft } from "lucide-react";
-import { getStoredApiKey, hasStoredApiKey, clearStoredApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
+import { hasAnyApiKey, getStoredModel } from "@/app/components/ApiKeyModal";
+import { getStoredApiKey, getProviderFromModel } from "@/lib/ai-providers";
 
 // Tipos
 interface Message {
@@ -48,7 +49,7 @@ function DevChatContent() {
 
   // Verificar API key al montar
   useEffect(() => {
-    if (!hasStoredApiKey()) {
+    if (!hasAnyApiKey()) {
       setApiKeyMissing(true);
     }
   }, []);
@@ -125,14 +126,32 @@ function DevChatContent() {
       setStreamingMessageId(assistantMessageId);
 
       try {
-        const apiKey = getStoredApiKey();
         const model = getStoredModel();
+        const provider = getProviderFromModel(model);
+        const apiKey = getStoredApiKey(provider);
+
+        // Construir headers según el proveedor
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+
+        if (apiKey) {
+          switch (provider) {
+            case "anthropic":
+              headers["x-anthropic-key"] = apiKey;
+              break;
+            case "google":
+              headers["x-google-key"] = apiKey;
+              break;
+            case "openai":
+              headers["x-openai-key"] = apiKey;
+              break;
+          }
+        }
+
         const response = await fetch("/api/dev-chat", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(apiKey && { "x-api-key": apiKey }),
-          },
+          headers,
           body: JSON.stringify({
             message: userMessage,
             conversationHistory: conversationHistory,
@@ -385,7 +404,7 @@ function DevChatContent() {
                 </button>
                 <div>
                   <h1 className="text-lg font-semibold text-gray-900">
-                    {selectedProject ? "Chat de Desarrollo" : "AI Dev Companion"}
+                    {selectedProject ? "Chat de Desarrollo" : "Juliet"}
                   </h1>
                   {selectedProject && (
                     <p className="text-xs text-gray-500">
@@ -395,15 +414,12 @@ function DevChatContent() {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  clearStoredApiKey();
-                  router.push("/");
-                }}
+                onClick={() => router.push("/")}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Cambiar API Key"
+                title="Configurar API Keys"
               >
                 <Key className="w-4 h-4" />
-                <span className="hidden sm:inline">API Key</span>
+                <span className="hidden sm:inline">API Keys</span>
               </button>
             </div>
           </div>
@@ -461,7 +477,7 @@ function DevChatContent() {
                     Selecciona un proyecto
                   </h2>
                   <p className="text-gray-600 max-w-md">
-                    Elige un proyecto del panel izquierdo o crea uno nuevo para comenzar a trabajar con Claude.
+                    Elige un proyecto del panel izquierdo o crea uno nuevo para comenzar a trabajar con Juliet.
                   </p>
                 </motion.div>
               ) : messages.length === 0 ? (
@@ -487,7 +503,7 @@ function DevChatContent() {
                     </svg>
                   </div>
                   <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                    ¡Hola! Soy Claude
+                    ¡Hola! Soy Juliet
                   </h2>
                   <p className="text-gray-600 max-w-md">
                     Estoy aquí para ayudarte con tu desarrollo. Puedo leer, escribir y

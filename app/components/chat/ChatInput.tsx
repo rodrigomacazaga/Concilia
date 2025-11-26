@@ -3,7 +3,13 @@
 import { useState, KeyboardEvent, useEffect, useRef } from "react";
 import { Send, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getStoredApiKey, getStoredModel, setStoredModel } from "@/app/components/ApiKeyModal";
+import { getStoredModel, setStoredModel, hasAnyApiKey } from "@/app/components/ApiKeyModal";
+import {
+  AIProvider,
+  getStoredApiKey,
+  getProviderFromModel,
+  PROVIDERS,
+} from "@/lib/ai-providers";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -13,12 +19,13 @@ interface ChatInputProps {
 interface ModelOption {
   id: string;
   name: string;
+  provider?: AIProvider;
 }
 
 const DEFAULT_MODELS: ModelOption[] = [
-  { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" },
-  { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
-  { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
+  { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", provider: "anthropic" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "google" },
+  { id: "gpt-4o", name: "GPT-4o", provider: "openai" },
 ];
 
 export default function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
@@ -45,22 +52,38 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
   }, [message]);
 
   const fetchModels = async () => {
-    const apiKey = getStoredApiKey();
-    if (!apiKey) return;
+    if (!hasAnyApiKey()) return;
 
     setIsLoadingModels(true);
     try {
+      // Construir headers con todas las API keys disponibles
+      const headers: Record<string, string> = {};
+
+      const anthropicKey = getStoredApiKey("anthropic");
+      const googleKey = getStoredApiKey("google");
+      const openaiKey = getStoredApiKey("openai");
+
+      if (anthropicKey) headers["x-anthropic-key"] = anthropicKey;
+      if (googleKey) headers["x-google-key"] = googleKey;
+      if (openaiKey) headers["x-openai-key"] = openaiKey;
+
       const response = await fetch("/api/models", {
         method: "GET",
-        headers: {
-          "x-api-key": apiKey,
-        },
+        headers,
       });
 
       const data = await response.json();
 
       if (data.success && data.models?.length > 0) {
         setModels(data.models);
+
+        // Si el modelo seleccionado no está disponible, seleccionar el primero
+        const currentModel = getStoredModel();
+        const modelExists = data.models.some((m: ModelOption) => m.id === currentModel);
+        if (!modelExists && data.models.length > 0) {
+          setSelectedModel(data.models[0].id);
+          setStoredModel(data.models[0].id);
+        }
       }
     } catch (err) {
       console.error("Error fetching models:", err);
@@ -80,6 +103,11 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
     return model?.name || "Seleccionar modelo";
   };
 
+  const getSelectedModelProvider = () => {
+    const provider = getProviderFromModel(selectedModel);
+    return PROVIDERS[provider].name.split(" ")[0];
+  };
+
   const handleSend = () => {
     if (message.trim() && !disabled) {
       onSendMessage(message);
@@ -97,6 +125,17 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
     }
   };
 
+  // Agrupar modelos por proveedor
+  const modelsByProvider = models.reduce(
+    (acc, model) => {
+      const provider = model.provider || getProviderFromModel(model.id);
+      if (!acc[provider]) acc[provider] = [];
+      acc[provider].push(model);
+      return acc;
+    },
+    {} as Record<AIProvider, ModelOption[]>
+  );
+
   return (
     <div className="border-t border-claude-border bg-white/80 backdrop-blur-sm">
       <div className="max-w-4xl mx-auto px-4 py-4">
@@ -108,7 +147,7 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="Envía un mensaje a Claude..."
+            placeholder="Envía un mensaje a Juliet..."
             rows={1}
             className="w-full resize-none rounded-2xl border border-claude-border bg-white pl-4 pr-14 py-3
                      text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-claude-orange/20
@@ -143,6 +182,7 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
               className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 hover:text-gray-700
                        hover:bg-gray-100 rounded-md transition-colors"
             >
+              <span className="text-gray-400">{getSelectedModelProvider()}:</span>
               <span>{getSelectedModelName()}</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${isModelDropdownOpen ? "rotate-180" : ""}`} />
             </button>
@@ -161,24 +201,36 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 5 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute bottom-full left-0 mb-1 w-56 bg-white rounded-lg shadow-lg
-                             border border-gray-200 overflow-hidden z-20"
+                    className="absolute bottom-full left-0 mb-1 w-64 bg-white rounded-lg shadow-lg
+                             border border-gray-200 overflow-hidden z-20 max-h-80 overflow-y-auto"
                   >
-                    <div className="py-1">
-                      {models.map((model) => (
-                        <button
-                          key={model.id}
-                          onClick={() => handleModelChange(model.id)}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                            selectedModel === model.id
-                              ? "bg-orange-50 text-orange-700"
-                              : "hover:bg-gray-50 text-gray-700"
-                          }`}
-                        >
-                          <span className="font-medium">{model.name}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {(["anthropic", "google", "openai"] as AIProvider[]).map((provider) => {
+                      const providerModels = modelsByProvider[provider];
+                      if (!providerModels || providerModels.length === 0) return null;
+
+                      return (
+                        <div key={provider}>
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase bg-gray-50 border-b">
+                            {PROVIDERS[provider].name}
+                          </div>
+                          <div className="py-1">
+                            {providerModels.map((model) => (
+                              <button
+                                key={model.id}
+                                onClick={() => handleModelChange(model.id)}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                  selectedModel === model.id
+                                    ? "bg-orange-50 text-orange-700"
+                                    : "hover:bg-gray-50 text-gray-700"
+                                }`}
+                              >
+                                <span className="font-medium">{model.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </motion.div>
                 </>
               )}
