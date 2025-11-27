@@ -116,15 +116,28 @@ Este es el modo de IMPLEMENTACION DIRECTA. Tu rol es ejecutar tareas de desarrol
 ✅ Corregir bugs
 ✅ Refactorizar codigo
 
-## FLUJO DE TRABAJO:
-1. Analiza brevemente que se necesita
-2. Implementa los cambios directamente
-3. Verifica que el codigo sigue los patrones existentes
-4. Actualiza el Memory Bank si cambias:
+## FLUJO DE TRABAJO TDD (Test-Driven Development):
+1. **Analiza** brevemente que se necesita
+2. **Verifica dependencias** - APIs, tablas, componentes requeridos existen
+3. **TESTS PRIMERO** - Crea/actualiza tests antes de implementar:
+   - Define los comportamientos esperados como tests
+   - Los tests deben fallar inicialmente (fase RED)
+4. **Implementa** el codigo minimo para pasar los tests (fase GREEN)
+5. **Refactoriza** mejorando el codigo sin romper tests (fase REFACTOR)
+6. **Verifica** que el codigo sigue los patrones existentes
+7. **Valida** - Ejecuta tests, type check, lint
+8. Actualiza el Memory Bank si cambias:
    - API-CONTRACTS.md si agregas/modificas endpoints
    - DATABASE-SCHEMA.md si cambias tablas
    - BUSINESS-LOGIC.md si cambias reglas de negocio
    - progress.md siempre que completes algo
+
+## TDD OBLIGATORIO:
+- Cada feature nueva DEBE tener tests
+- Cada bug fix DEBE incluir test que lo reproduce
+- Estructura de test: describe() -> it() con nombres descriptivos
+- Patron AAA: Arrange (preparar), Act (ejecutar), Assert (verificar)
+- Mock de dependencias externas
 
 ## FORMATO DE RESPUESTA:
 - Se directo y eficiente
@@ -221,9 +234,17 @@ Crea un plan estructurado que incluya:
 - Que documentos actualizar
 - Que nueva documentacion crear
 
-### 5. TESTING
-- Casos de prueba principales
+### 5. TESTING (TDD Obligatorio)
+- Tests que deben crearse ANTES de implementar
+- Casos de prueba principales con comportamiento esperado
 - Casos edge a probar
+- Estructura de archivos de test
+
+### 6. VALIDACION POST-IMPLEMENTACION
+- Tests a ejecutar (npm test)
+- Type checking (tsc --noEmit)
+- Lint (eslint)
+- Build verification (npm run build)
 
 ═══════════════════════════════════════════════════════════════
 ## FASE 3: CONFIRMACION
@@ -242,10 +263,21 @@ Presenta tu plan al usuario con:
 ═══════════════════════════════════════════════════════════════
 
 Si el usuario confirma con "si", "procede", "adelante", "ok", etc:
-1. Implementa paso a paso segun el plan
-2. Reporta progreso despues de cada paso mayor
-3. Si encuentras problemas, detente y comunica
-4. Actualiza Memory Bank al final
+
+### TDD WORKFLOW:
+1. **TESTS PRIMERO** - Crea tests para el feature antes de implementar
+   - Tests deben definir el comportamiento esperado
+   - Tests fallaran inicialmente (fase RED)
+2. **IMPLEMENTA** paso a paso segun el plan
+   - Codigo minimo para pasar tests (fase GREEN)
+   - Reporta progreso despues de cada paso mayor
+3. **REFACTORIZA** mejorando calidad sin romper tests (fase REFACTOR)
+4. **VALIDA** antes de reportar completado:
+   - Ejecuta tests: npm test
+   - Type check: tsc --noEmit
+   - Si hay errores, corrige ANTES de continuar
+5. Si encuentras problemas, detente y comunica
+6. Actualiza Memory Bank al final
 
 ## FORMATO DE RESPUESTA EN DEEP THINK:
 

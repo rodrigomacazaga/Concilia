@@ -45,3 +45,17 @@ export {
   shouldPauseForQuestion,
   type ValidateOptions,
 } from "./validator";
+
+// Test Generator (TDD)
+export {
+  generateTestsForFeature,
+  generateTestFileName,
+  generateTestPath,
+  generateTDDPrompt,
+  generateTestRequirements,
+  detectTestType,
+  templates as testTemplates,
+  type TestTemplate,
+  type GeneratedTest,
+  type TestGenerationContext,
+} from "./test-generator";

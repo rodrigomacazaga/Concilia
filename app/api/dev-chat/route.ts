@@ -13,6 +13,8 @@ import {
 import { Mode, MODE_CONFIGS, loadModeContext } from "@/lib/modes";
 import { designSystemPostHook, HookResult } from "@/lib/design-system";
 import { parseAndExecuteCodeBlocks, analyzeCodeBlocks } from "@/lib/code-executor";
+import { validateGeneration, updateProgress, addComponent, addApi } from "@/lib/validation/validator";
+import { logger } from "@/lib/observability/logger";
 
 // Tipos para el request body
 interface ChatMessage {
@@ -74,6 +76,19 @@ interface SSECodeExecutionEvent {
   errors: string[];
 }
 
+interface SSEValidationEvent {
+  type: "validation";
+  isValid: boolean;
+  testsRan: boolean;
+  testsPassed: number;
+  testsFailed: number;
+  typeCheckPassed: boolean;
+  typeErrors: number;
+  lintPassed: boolean;
+  lintErrors: number;
+  warnings: string[];
+}
+
 type SSEEvent =
   | SSETokenEvent
   | SSEToolUseEvent
@@ -81,7 +96,8 @@ type SSEEvent =
   | SSECompleteEvent
   | SSEErrorEvent
   | SSEDesignSystemEvent
-  | SSECodeExecutionEvent;
+  | SSECodeExecutionEvent
+  | SSEValidationEvent;
 
 // Modelo por defecto
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
@@ -1026,6 +1042,91 @@ export async function POST(req: NextRequest) {
             }
           }
           // === FIN HOOK Code Execution ===
+
+          // === HOOK: Validation Post-Generation ===
+          if (projectPath && (mode === 'execute' || mode === 'deepThink')) {
+            try {
+              const codeAnalysis = analyzeCodeBlocks(fullContent);
+
+              if (codeAnalysis.hasExecutableCode) {
+                logger.info("Running validation on generated code", {
+                  mode,
+                  fileCount: codeAnalysis.fileCount
+                });
+
+                // Extract file paths from code blocks
+                const generatedFiles = codeAnalysis.blocks
+                  .filter(block => block.filename)
+                  .map(block => block.filename as string);
+
+                const validationResult = await validateGeneration({
+                  projectPath,
+                  serviceName: currentService || undefined,
+                  feature: `Generated code from ${mode} mode`,
+                  generatedCode: fullContent,
+                  generatedFiles,
+                  skipTests: false,      // Run tests
+                  skipTypes: false,      // Run type check
+                  skipLint: true,        // Skip lint for speed
+                  skipBuild: true,       // Skip build for speed
+                });
+
+                const warnings: string[] = [];
+                const summary = validationResult.summary;
+
+                // Collect warnings from summary
+                if (summary.typeErrors > 0) {
+                  warnings.push(`${summary.typeErrors} errores de tipos`);
+                }
+                if (summary.testsFailed > 0) {
+                  warnings.push(`${summary.testsFailed} tests fallaron`);
+                }
+                if (summary.lintErrors > 0) {
+                  warnings.push(`${summary.lintErrors} errores de lint`);
+                }
+                if (summary.dependenciesMissing > 0) {
+                  warnings.push(`${summary.dependenciesMissing} dependencias faltantes`);
+                }
+
+                const validationEvent: SSEValidationEvent = {
+                  type: "validation",
+                  isValid: validationResult.success,
+                  testsRan: summary.testsPassed > 0 || summary.testsFailed > 0,
+                  testsPassed: summary.testsPassed,
+                  testsFailed: summary.testsFailed,
+                  typeCheckPassed: summary.typeErrors === 0,
+                  typeErrors: summary.typeErrors,
+                  lintPassed: summary.lintErrors === 0,
+                  lintErrors: summary.lintErrors,
+                  warnings,
+                };
+
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify(validationEvent)}\n\n`)
+                );
+
+                // Track progress
+                if (projectId) {
+                  try {
+                    updateProgress(projectId, {
+                      lastUpdated: new Date(),
+                    });
+                  } catch (progressErr) {
+                    // Ignore progress tracking errors
+                  }
+                }
+
+                logger.info("Validation completed", {
+                  isValid: validationResult.success,
+                  testsPassed: summary.testsPassed,
+                  testsFailed: summary.testsFailed,
+                });
+              }
+            } catch (err) {
+              logger.error("Validation hook error", err);
+            }
+          }
+          // === FIN HOOK Validation ===
 
           controller.close();
           console.log("[dev-chat] Stream cerrado exitosamente");
