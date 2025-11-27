@@ -11,6 +11,11 @@ import {
   MessageSquare,
   BookOpen,
   GitBranch,
+  Server,
+  Palette,
+  Activity,
+  Bot,
+  TrendingUp,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useDevContext } from "@/app/lib/DevContext";
@@ -21,6 +26,11 @@ import TerminalOutput from "./TerminalOutput";
 import ConversationHistory from "@/app/components/ConversationHistory";
 import { MemoryBankPanel } from "@/app/components/MemoryBankPanel";
 import GitPanel from "@/app/components/GitPanel";
+import MCPServerPanel from "@/app/components/MCPServerPanel";
+import DesignSystemPanel from "@/app/components/DesignSystemPanel";
+import ObservabilityPanel from "@/app/components/ObservabilityPanel";
+import AutonomousPanel from "@/app/components/AutonomousPanel";
+import DevelopmentDashboard from "@/app/components/DevelopmentDashboard";
 
 interface PreviewPanelProps {
   projectId?: string | null;
@@ -30,7 +40,7 @@ interface PreviewPanelProps {
   onServiceSelect?: (service: string | null) => void;
 }
 
-type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git";
+type TabId = "preview" | "files" | "changes" | "terminal" | "chats" | "memory-bank" | "git" | "mcp" | "design-system" | "observability" | "agent" | "dashboard";
 
 export default function PreviewPanel({
   projectId,
@@ -88,6 +98,31 @@ export default function PreviewPanel({
       id: "git" as TabId,
       label: "Git",
       icon: GitBranch,
+    },
+    {
+      id: "mcp" as TabId,
+      label: "MCP",
+      icon: Server,
+    },
+    {
+      id: "design-system" as TabId,
+      label: "DS",
+      icon: Palette,
+    },
+    {
+      id: "observability" as TabId,
+      label: "Obs",
+      icon: Activity,
+    },
+    {
+      id: "agent" as TabId,
+      label: "Agent",
+      icon: Bot,
+    },
+    {
+      id: "dashboard" as TabId,
+      label: "Dev",
+      icon: TrendingUp,
     },
   ];
 
@@ -244,6 +279,26 @@ export default function PreviewPanel({
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">
               Selecciona un proyecto para ver Git
             </div>
+          )}
+
+          {activePreviewTab === "mcp" && (
+            <MCPServerPanel projectId={projectId} />
+          )}
+
+          {activePreviewTab === "design-system" && (
+            <DesignSystemPanel projectId={projectId} />
+          )}
+
+          {activePreviewTab === "observability" && (
+            <ObservabilityPanel />
+          )}
+
+          {activePreviewTab === "agent" && (
+            <AutonomousPanel />
+          )}
+
+          {activePreviewTab === "dashboard" && (
+            <DevelopmentDashboard sessionId={projectId || "default"} />
           )}
         </motion.div>
       </div>
